@@ -1,0 +1,84 @@
+name: buscajus
+
+x-backend: &backend
+  build: ./backend
+  image: buscajus-backend
+  env_file:
+    - path: .env
+      required: false
+  environment: &backend-env
+    BUSCAJUS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buscajus}:${POSTGRES_PASSWORD:-buscajus}@db:5432/${POSTGRES_DB:-buscajus}
+    BUSCAJUS_DIRETORIO_RAW: /dados/raw
+    BUSCAJUS_DIRETORIO_MODELOS: /dados/modelos
+    BUSCAJUS_DIRETORIO_TMP_CADERNOS: /tmp-cadernos
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buscajus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buscajus}
+      POSTGRES_DB: ${POSTGRES_DB:-buscajus}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migracoes:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - modelos:/dados/modelos
+    depends_on:
+      migracoes:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/saude')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    <<: *backend
+    command: ["buscajus-worker"]
+    volumes:
+      - raw:/dados/raw
+      - modelos:/dados/modelos
+    # Cadernos do DJEN contêm nomes de partes: ficam só em memória, nunca em volume
+    # persistente nem em backup (ARCHITECTURE.md, seção 6.2).
+    tmpfs:
+      - /tmp-cadernos:size=256m,mode=0700,uid=10001
+    depends_on:
+      migracoes:
+        condition: service_completed_successfully
+
+  web:
+    build: ./frontend
+    image: buscajus-web
+    environment:
+      # Usada pelo servidor Next.js a partir da Fase 5.
+      API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  raw:
+  modelos:
