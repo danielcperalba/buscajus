@@ -9,6 +9,8 @@
 > **Revisão 3 (22/10/2026)**: aprovado manter PJ e entes públicos no texto; classificação PF × PJ heurística (a consulta pública não traz `cpf_cnpj`), com MEI como PF e mascaramento de qualquer CPF; condições para o conjunto de avaliação do NER.
 >
 > **Revisão 4 (22/10/2026)**: início das ementas do TJPR no DJEN em 23/07/2025; API do TJDFT validada (curinga, filtros, `tamanho` 40, URL estável, UTC); segredo de justiça do TJDFT segue excluído e vira questão aberta; regra de CPF reforçada; amostra e prazo do NER aprovados. Correção posterior: `acordaos-tr` é subbase (não base) e `segredoJustica` é booleano nos registros.
+>
+> **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
 
@@ -146,6 +148,21 @@ Todo conector implementa a mesma interface (seção 3.4) e obedece a estas regra
 | `GET /api/v1/comunicacao` | **Apenas checagens pontuais** (ex.: confirmar o estado de uma comunicação que sumiu numa nova versão do caderno, ou apurar um pedido de remoção). Não é usado para coleta em massa. |
 
 **Sem filtro por tipo de documento no servidor**: o filtro de `tipoDocumento` é feito do nosso lado.
+
+**Caderno: o que já foi validado** (F1-01; os itens ainda abertos estão no fim)
+
+- **Acesso**: a API (CloudFront) **bloqueia IPs fora do Brasil** (HTTP 403, "configured to block access from your country"). Coleta e investigação precisam rodar de uma máquina no Brasil; nunca usar proxy para contornar o bloqueio (seção 3.1).
+- **Metadados** (`GET /api/v1/caderno/{sigla}/{data}/D`, ~750 bytes): `versao`, `hash` (SHA-256 do ZIP), `status`, `total_comunicacoes` e `url`. Valores de `status` do caderno (Swagger): `Não Processado`, `Em processamento`, `Processado`, `Sem comunicações`, `Cancelado`. Só `Processado` é baixado; `Não Processado` e `Em processamento` são tentados de novo mais tarde; `Sem comunicações` equivale a dia sem caderno.
+- **Dia sem caderno**: HTTP 404 (ex.: TJPR 2023-09-01) → `sem_caderno`.
+- **URL temporária**: host `djen-prd.prd.s3.cnj.jus.br`, válida por **5 minutos**. `HEAD` responde 403; `GET` (inclusive com `Range`) funciona. Por isso o download começa logo depois de obter os metadados, e uma nova tentativa pede metadados novos.
+- **SHA-256**: o hash do ZIP baixado bateu com o campo `hash`.
+- **ZIP**: arquivos `{SIGLA}-D-{AAAA-MM-DD}_{n}.json`, cada um `{"count": ≤ 1000, "items": [...]}`, com itens no mesmo formato de `/api/v1/comunicacao`. A soma dos `items` bateu com `total_comunicacoes` (92.172 no TJPR em 15/10/2026: 57 MB compactado, 302 MB descompactado, 93 arquivos, 1.536 ementas de acórdão, 34 órgãos; em 02/03/2026: 2,7 MB, 766 ementas). Cada arquivo tem poucos MB e é lido inteiro; o caderno nunca é carregado todo em memória.
+- **`tipoDocumento`** pode vir escapado no JSON (`"Ementa de Ac\u00f3rd\u00e3o"`): a comparação é feita depois do *parse*, nunca por regex no texto bruto.
+- **Destinatários** na consulta pública: `destinatarios[]` com `nome`, `polo` e `comunicacao_id`; `destinatarioadvogados[]` com o advogado aninhado em `advogado` (`nome`, `numero_oab`, `uf_oab`). Não há `cpf_cnpj`.
+- **Cabeçalho do `texto`**: tabela com `Processo:`, `Relator(a):`, `Órgão Julgador:` (com entidades: `&Oacute;rg&atilde;o`) e `Data do Julgamento:`, seguida de `Ementa:` numa célula `colspan=2`. Presente em 100% das 1.536 ementas de 15/10/2026. A célula do processo traz a classe colada ao número: `0042094-26.2025.8.16.0014(Recurso Inominado)`; o parser separa número e classe e confere o número com `numeroprocessocommascara`.
+- **Nomes no texto**: em ~4% das ementas (60 de 1.536) o nome de um destinatário PF aparece no texto, sobretudo em processos criminais e embargos.
+
+**Ainda abertos** (script `backend/scripts/spike_caderno_djen.py`, que imprime só agregados e roda no Brasil): valores de `status` e de cancelamento das comunicações (`ativo`, `status`, `data_cancelamento`, `motivo_cancelamento`); tipos de `codigoClasse` e `idOrgao`; variações dos rótulos do cabeçalho em outros dias; HTML exato da célula da ementa. As fixtures sintéticas (`backend/tests/fixtures/djen/`) assumem `status` `"P"` (ativa) e `"C"` (cancelada) até a confirmação.
 
 **Volume de referência (TJPR, caderno de 15/10/2026)**: ~57 MB compactado, ~92 mil comunicações, 1.536 ementas de acórdão (~1,7%). O ZIP é descartado depois do processamento.
 
