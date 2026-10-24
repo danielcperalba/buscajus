@@ -74,14 +74,19 @@ uv run buscajus ingest reprocessar --fonte djen [--tribunal TJPR] --de 2026-10-0
 # Confere a versão dos cadernos recentes e reprocessa os que mudaram (checagem pontual dos ausentes)
 uv run buscajus ingest verificar-versoes --tribunal TJPR [--dias 30]
 
+# Coleta os acórdãos do TJDFT por dia de publicação (do mais recente ao mais antigo); --forcar recoleta
+uv run buscajus ingest tjdft --de 2026-10-01 --ate 2026-10-15 [--forcar]
+
 # Estado e contagens de cada unidade de coleta
 uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]
 ```
 
-- **A coleta do DJEN exige o modelo de NER** (`BUSCAJUS_ANONIMIZACAO__MODELO_NER`, camada 2 da anonimização, F1-36/F1-37). Sem ele, `ingest djen` e `verificar-versoes` saem com código 2 antes de qualquer acesso à fonte.
+- **As coletas exigem o modelo de NER** (`BUSCAJUS_ANONIMIZACAO__MODELO_NER`, camada 2 da anonimização, F1-36/F1-37). Sem ele, `ingest djen`, `ingest tjdft` e `verificar-versoes` saem com código 2 antes de qualquer acesso à fonte.
 - A API do DJEN bloqueia IPs fora do Brasil: a coleta roda de uma máquina no Brasil.
-- O relatório de `status` traz comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro.
-- O agendador do `worker` (coleta diária e checagem de versões) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
+- O relatório de `status` traz comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro; nas janelas do TJDFT, também os descartados por segredo de justiça (só a contagem).
+- No TJDFT, cada dia é conferido antes de gravar: se os uuids únicos não baterem com o total da API, o dia é relido (até 3 vezes) e, persistindo, fica com erro.
+- O agendador do `worker` (DJEN: coleta diária e checagem de versões; TJDFT: dia mais recente, reconsulta do anterior e recoleta dos últimos 30 dias) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
+- A tabela de classes processuais (`classe_cnj`) vem da TPU do CNJ, num arquivo versionado. Para atualizá-la: `uv run python scripts/atualizar_tpu.py` (em `backend/`) e uma migração que chame `carregar_tpu`.
 
 ### Frontend
 

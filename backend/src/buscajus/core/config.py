@@ -101,6 +101,11 @@ class ConfigAgendador(BaseModel):
     ativo: bool = False
     # Horário (America/Sao_Paulo) a partir do qual o caderno do dia é coletado.
     horario_djen: time = time(9, 0)
+    # Horário da coleta diária do TJDFT (a maioria dos acórdãos sai à meia-noite em São Paulo).
+    horario_tjdft: time = time(8, 0)
+    # Dias do TJDFT recoletados todo dia (mudanças de segredo e registros publicados com
+    # atraso); inclui a reconsulta do dia anterior.
+    dias_recoleta_tjdft: int = Field(default=30, ge=1)
     # Dias anteriores revisitados na coleta diária (cadernos publicados com atraso).
     dias_retroativos: int = Field(default=3, ge=0)
     # Janela da checagem de versões dos cadernos (F1-16).

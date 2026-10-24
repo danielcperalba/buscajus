@@ -285,7 +285,7 @@ O orquestrador (`ingest.runner`) é genérico: persiste o estado das unidades, a
 ### 3.5 Deduplicação entre fontes
 
 - Dentro de uma fonte: chave única `(fonte, id_fonte)`.
-- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda, o upsert verifica se já existe acórdão de **outra fonte** com o mesmo `numero_processo` e a mesma data de julgamento (ou, na falta dela, de publicação/disponibilização). Se existir, o novo registro é gravado com `duplicata_de` apontando para o existente e não é indexado. Prioridade de fonte: API própria do tribunal > DJEN.
+- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda (F2-09), o upsert verifica se já existe acórdão **ativo** de **outra fonte** com o mesmo `numero_processo` e a mesma `data_referencia` (data de julgamento ou, na falta dela, de publicação/disponibilização). Prioridade de fonte: API própria do tribunal > DJEN (`ingest.upsert.PRIORIDADE_FONTE`). O de menor prioridade fica `duplicado`, com `duplicata_de` apontando para o outro, e não é indexado, seja ele o novo (o DJEN que chega depois do TJDFT) ou o que já estava no banco (o TJDFT que chega depois marca o DJEN). Só um acórdão `ativo` torna o outro duplicado: um TJDFT em quarentena não esconde o DJEN.
 
 ---
 
@@ -533,6 +533,8 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 - A substituição usa iniciais com ponto, ignorando partículas (`JOSÉ DA SILVA SANTOS` → `J.S.S.`), como os próprios tribunais costumam fazer.
 - O casamento é tolerante: comparação sem acentos e sem diferença de caixa, feita sobre os nós de texto do HTML (com as entidades já decodificadas) e re-serializada, para o `texto` continuar sendo HTML válido. Casa o nome completo e também subsequências de dois ou mais tokens (ex.: primeiro e último nome). Um token isolado não é substituído nessa camada, para evitar falsos positivos com sobrenomes comuns; esses casos ficam para a camada 2.
 - O nome do relator e os rótulos do cabeçalho não são alterados: as linhas de metadados do cabeçalho (processo, relator, órgão julgador, data) ficam fora das camadas de nomes, e o nome do relator fica protegido também no corpo (citações). Na substituição, o texto é decodificado (inclusive entidades escapadas duas vezes) e o HTML é re-serializado com os caracteres em Unicode.
+
+**TJDFT** (`ingest.tjdft.anonimizacao`): a API não traz partes, então não há camada 1. A ementa e a decisão passam pela camada 2 (mesma interface `DetectorPessoas` e mesmas exceções; os magistrados do próprio acórdão, `nomeRelator`, `nomeRelatorDesignado` e `nomeRevisor`, ficam protegidos) e pelo mascaramento de CPF; se sobrar CPF, o registro é recusado e só o uuid é contado. Sem NER configurado, a coleta do TJDFT não é criada.
 
 **Mascaramento de CPF (DJEN e TJDFT)**
 
@@ -803,7 +805,7 @@ Item de resultado:
 | `worker` | mesma imagem da `api` | Agendador interno (caderno diário, checagem de versões, TJDFT) + job de embeddings; carrega também o modelo de NER |
 | `web` | Node 20 | Next.js |
 
-**Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` uma coleta diária por tribunal do DJEN a partir do horário configurado (padrão 9h, America/Sao_Paulo) e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. A coleta diária revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
+**Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` as coletas diárias que o worker sabe executar e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. DJEN: uma por tribunal, a partir de `horario_djen` (padrão 9h, America/Sao_Paulo); revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. TJDFT (com `tjdft.ativo`): uma por dia, a partir de `horario_tjdft` (8h); recoleta do dia mais recente até `dias_recoleta_tjdft` (30) dias atrás, o que cobre a reconsulta do dia anterior, as mudanças de segredo e os registros publicados com atraso. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
 
 Volumes: `pgdata`, `raw` (brutos filtrados), `models` (cache de pesos do Hugging Face). Área temporária `tmp-cadernos` montada como **tmpfs** no `worker`, dimensionada para o maior caderno aceito (um caderno por vez; tmpfs de 1.100 MB para o limite de 1 GB; o maior caderno do TJPR visto no F1-01 tem 163 MB). O tmpfs só ocupa RAM com o ZIP em uso; não é persistido e fica fora de backup.
 

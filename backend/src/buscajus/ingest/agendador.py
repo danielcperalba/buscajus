@@ -1,8 +1,14 @@
-"""Agendador do worker (F1-30) sobre a fila ``tarefa`` (``FOR UPDATE SKIP LOCKED``).
+"""Agendador do worker (F1-30, F2-10) sobre a fila ``tarefa`` (``FOR UPDATE SKIP LOCKED``).
 
-A cada ciclo: agenda a tarefa diária de cada tribunal do DJEN (uma por dia, a partir do
-horário configurado) e executa as tarefas pendentes que já venceram. Cada execução fica
-registrada na própria ``tarefa`` (status, tentativas, último erro sem conteúdo).
+A cada ciclo: agenda as tarefas diárias (uma por dia, a partir do horário configurado) que
+este worker sabe executar e executa as pendentes que já venceram:
+
+- DJEN, uma por tribunal: cadernos recentes e checagem de versões;
+- TJDFT: o dia mais recente, a reconsulta do anterior e a recoleta dos últimos
+  ``dias_recoleta_tjdft`` dias (mudanças de segredo e registros publicados com atraso).
+
+Cada execução fica registrada na própria ``tarefa`` (status, tentativas, último erro sem
+conteúdo).
 
 Desligado por padrão (``agendador.ativo = false``): ligar depende de decidir onde os dados
 reais ficam.
@@ -22,11 +28,13 @@ from buscajus.core.erros import descrever_erro
 from buscajus.ingest.djen import fabrica
 from buscajus.ingest.djen.fabrica import criar_coleta
 from buscajus.ingest.djen.versoes import verificar_versoes
+from buscajus.ingest.tjdft import fabrica as fabrica_tjdft
 
 log = logging.getLogger(__name__)
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 TAREFA_DJEN_DIARIO = "djen_diario"
+TAREFA_TJDFT_DIARIO = "tjdft_diario"
 
 Executor = Callable[[Mapping[str, Any]], None]
 
@@ -55,11 +63,18 @@ class Agendador:
 
     def agendar(self) -> None:
         agora = self._agora().astimezone(FUSO)
-        horario = datetime.combine(agora.date(), self._config.agendador.horario_djen, FUSO)
-        if agora < horario:
-            return
-        for tribunal in self._config.djen.tribunais:
-            payload = {"tribunal": tribunal, "data": agora.date().isoformat()}
+        hoje = agora.date().isoformat()
+        config = self._config.agendador
+        tarefas = [
+            (TAREFA_DJEN_DIARIO, config.horario_djen, {"tribunal": tribunal, "data": hoje})
+            for tribunal in self._config.djen.tribunais
+        ]
+        if self._config.tjdft.ativo:
+            tarefas.append((TAREFA_TJDFT_DIARIO, config.horario_tjdft, {"data": hoje}))
+        for tipo, horario_do_dia, payload in tarefas:
+            horario = datetime.combine(agora.date(), horario_do_dia, FUSO)
+            if agora < horario or tipo not in self._executores:
+                continue
             with self._engine.begin() as conexao:
                 conexao.execute(
                     text("""
@@ -70,7 +85,7 @@ class Agendador:
                             WHERE tipo = :tipo AND payload = CAST(:payload AS jsonb)
                         )
                     """),
-                    {"tipo": TAREFA_DJEN_DIARIO, "payload": json.dumps(payload), "quando": horario},
+                    {"tipo": tipo, "payload": json.dumps(payload), "quando": horario},
                 )
 
     def executar_proxima(self) -> bool:
@@ -141,6 +156,27 @@ def coleta_djen_diaria(config: Config, engine: Engine) -> Executor:
                 hoje=hoje,
                 dias=config.agendador.dias_verificacao_versao,
             )
+        finally:
+            coleta.fechar()
+
+    return executar
+
+
+def coleta_tjdft_diaria(config: Config, engine: Engine) -> Executor:
+    """Executor da tarefa diária do TJDFT: do dia mais recente aos últimos 30 dias.
+
+    Todos os dias são recoletados (``forcar``): o mais recente, a reconsulta do anterior
+    (virada do dia em UTC) e a recoleta, que pega mudanças de segredo e registros publicados
+    com atraso. O upsert por uuid evita duplicatas.
+    """
+
+    def executar(payload: Mapping[str, Any]) -> None:
+        hoje = datetime.fromisoformat(str(payload["data"])).date()
+        coleta = fabrica_tjdft.criar_coleta(config, engine)  # sem NER: falha fechada aqui
+        try:
+            inicio = hoje - timedelta(days=config.agendador.dias_recoleta_tjdft)
+            unidades = coleta.conector.planejar("TJDFT", inicio, hoje)
+            coleta.orquestrador.executar(unidades, forcar=True)
         finally:
             coleta.fechar()
 
