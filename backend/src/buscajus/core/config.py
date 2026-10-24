@@ -81,9 +81,13 @@ class ConfigDjen(BaseModel):
 
 class ConfigTjdft(BaseModel):
     ativo: bool = True
+    url_api: str = "https://jurisdf.tjdft.jus.br/api/v1/pesquisa"
     # A API rejeita páginas com mais de 40 registros (HTTP 400).
     tamanho_pagina: int = Field(default=40, ge=1, le=40)
+    # A documentação não informa limite de taxa: 1 requisição/s por conta própria.
     requisicoes_por_segundo: float = Field(default=1.0, gt=0)
+    # Leituras completas do dia quando os uuids únicos não batem com hits.value (F2-04).
+    tentativas_integridade: int = Field(default=3, ge=1)
 
 
 class ConfigAnonimizacao(BaseModel):
