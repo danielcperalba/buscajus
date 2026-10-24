@@ -1,0 +1,12 @@
+{
+  "tribunal": "TJPR",
+  "sigla_tribunal": "TJPR",
+  "data": "2026-10-15",
+  "meio": "D",
+  "versao": 2,
+  "status": "Processado",
+  "hash": "8c31319abf1d98421e3627c6ca1317e0efaef113756790c52bf1308afe1c6580",
+  "total_comunicacoes": 25,
+  "numero_paginas": 3,
+  "url": "https://djen-prd.prd.s3.cnj.jus.br/cadernos/TJPR/2026-10-15/v2/caderno.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&X-Amz-Signature=assinatura-ficticia"
+}
