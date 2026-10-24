@@ -1,30 +1,35 @@
+import re
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config as ConfigAlembic
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, text
 
 pytestmark = pytest.mark.banco
 
-ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
+TABELAS_POR_REVISAO = {
+    "0002": {"caderno_djen", "coleta_janela", "coleta_bruta", "tarefa"},
+    "0003": {"acordao", "acordao_historico"},
+    "0004": {"bloqueio", "pedido_remocao"},
+}
+
+# Nenhuma coluna pode guardar partes, advogados ou destinatários (ARCHITECTURE.md, seção 6.6).
+COLUNA_PROIBIDA = re.compile(r"destinatari|advogad|parte|cpf|cnpj|polo")
 
 
-@pytest.fixture
-def alembic(url_banco_teste: str) -> Iterator[ConfigAlembic]:
-    config = ConfigAlembic(str(ALEMBIC_INI))
-    config.set_main_option("sqlalchemy.url", url_banco_teste)
-    command.downgrade(config, "base")
-    yield config
-    command.downgrade(config, "base")
+@pytest.fixture(autouse=True)
+def _banco_vazio(alembic: ConfigAlembic) -> Iterator[None]:
+    command.downgrade(alembic, "base")
+    yield
+    command.downgrade(alembic, "base")
 
 
-@pytest.fixture
-def engine(url_banco_teste: str) -> Iterator[Engine]:
-    engine = create_engine(url_banco_teste)
-    yield engine
-    engine.dispose()
+def _tabelas(engine: Engine) -> set[str]:
+    with engine.connect() as conexao:
+        return set(
+            conexao.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+        )
 
 
 def test_upgrade_cria_extensoes(alembic: ConfigAlembic, engine: Engine) -> None:
@@ -50,4 +55,53 @@ def test_downgrade_e_upgrade_de_novo(alembic: ConfigAlembic, engine: Engine) -> 
             conexao.scalar(text("SELECT count(*) FROM pg_ts_config WHERE cfgname = 'pt_unaccent'"))
             == 0
         )
+    assert _tabelas(engine) <= {"alembic_version"}
     command.upgrade(alembic, "head")
+
+
+@pytest.mark.parametrize("revisao", sorted(TABELAS_POR_REVISAO))
+def test_cada_migracao_aplica_e_reverte(
+    alembic: ConfigAlembic, engine: Engine, revisao: str
+) -> None:
+    anterior = f"{int(revisao) - 1:04d}"
+    command.upgrade(alembic, revisao)
+    assert TABELAS_POR_REVISAO[revisao] <= _tabelas(engine)
+    command.downgrade(alembic, anterior)
+    assert not TABELAS_POR_REVISAO[revisao] & _tabelas(engine)
+
+
+def test_esquema_sem_colunas_de_partes(alembic: ConfigAlembic, engine: Engine) -> None:
+    command.upgrade(alembic, "head")
+    with engine.connect() as conexao:
+        colunas = conexao.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public'"
+            )
+        ).all()
+    assert colunas
+    proibidas = [f"{t}.{c}" for t, c in colunas if COLUNA_PROIBIDA.search(c)]
+    assert proibidas == []
+
+
+def test_busca_tsv_e_data_referencia_sao_geradas(alembic: ConfigAlembic, engine: Engine) -> None:
+    command.upgrade(alembic, "head")
+    with engine.begin() as conexao:
+        conexao.execute(
+            text("""
+                INSERT INTO acordao (fonte, id_fonte, numero_processo, numero_processo_mascara,
+                    numero_processo_valido, tribunal, ementa, link_oficial, hash_conteudo,
+                    data_disponibilizacao, classe_nome)
+                VALUES ('djen', '1', '00000000000000000000', '0000000-00.0000.0.00.0000',
+                    false, 'TJPR', 'Partilha de bens na herança.', 'https://exemplo',
+                    'h', '2026-10-14', 'Apelação Cível')
+            """)
+        )
+        linha = conexao.execute(
+            text(
+                "SELECT data_referencia, busca_tsv @@ to_tsquery('pt_unaccent', 'heranca') "
+                "FROM acordao"
+            )
+        ).one()
+    assert str(linha[0]) == "2026-10-14"
+    assert linha[1] is True

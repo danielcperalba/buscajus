@@ -3,8 +3,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config as ConfigAlembic
+from sqlalchemy import Engine, create_engine, text
 
 from buscajus.core.config import obter_config
+
+ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
 
 
 @pytest.fixture(autouse=True)
@@ -26,3 +31,33 @@ def url_banco_teste() -> str:
     if not url:
         pytest.skip("BUSCAJUS_TEST_DATABASE_URL não definida")
     return url
+
+
+@pytest.fixture
+def alembic(url_banco_teste: str) -> ConfigAlembic:
+    config = ConfigAlembic(str(ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", url_banco_teste)
+    return config
+
+
+@pytest.fixture
+def engine(url_banco_teste: str) -> Iterator[Engine]:
+    engine = create_engine(url_banco_teste)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def banco(alembic: ConfigAlembic, engine: Engine) -> Iterator[Engine]:
+    """Banco com todas as migrações aplicadas; as tabelas são esvaziadas ao fim do teste."""
+    command.upgrade(alembic, "head")
+    yield engine
+    with engine.begin() as conexao:
+        tabelas = conexao.scalars(
+            text(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+            )
+        ).all()
+        if tabelas:
+            conexao.execute(text(f"TRUNCATE {', '.join(tabelas)} RESTART IDENTITY CASCADE"))
