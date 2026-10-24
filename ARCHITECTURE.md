@@ -16,6 +16,8 @@
 >
 > **Revisão 8 (24/10/2026)**: apagamento do conteúdo de acórdãos removidos (seção 4.5), conferência mensal dos dias antigos do TJDFT com as contagens medidas (seção 3.3) e logs em stderr (seção 6.2).
 >
+> **Revisão 9 (24/10/2026)**: Fase 3 sem dados reais: abstração de embeddings, fatiamento e ferramenta de avaliação (seção 7.5); dependências de modelo num grupo opcional.
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -641,6 +643,13 @@ O modelo **não está fixado**. Candidatos avaliados na Fase 3:
 ### 7.4 Troca de modelo
 
 Nova coluna/tabela com a nova dimensão → job preenche em paralelo → avaliação → a configuração `modelo_ativo` muda → trechos antigos removidos. A API usa sempre o mesmo modelo para a consulta e para os trechos consultados.
+
+### 7.5 Implementação (F3-02 a F3-04)
+
+- **Abstração** (`buscajus.embed.embedder`): `Embedder` com `nome` (`modelo@revisão`, o valor de `acordao_trecho.modelo`), `dimensao`, `max_tokens`, `tokenizador`, `embed_consultas` e `embed_passagens`, que devolvem vetores `float32` com norma L2 1. Prefixos por família: e5 usa `query: `/`passage: `; os demais candidatos, nenhum. `EmbedderSentenceTransformers` carrega o modelo local, processa em lotes (`embeddings.tamanho_lote`) e usa GPU se houver (`embeddings.dispositivo = auto`).
+- **Dependências**: `sentence-transformers` e `torch` (CPU, do índice do PyTorch) ficam no grupo opcional `embeddings` (`uv sync --group embeddings`), fora do sync padrão e da imagem até o F3-12. Os testes com modelo real usam um modelo de teste de ~17 MB com revisão fixada, sob o marcador `modelo`, num job separado do CI.
+- **Fatiamento** (`buscajus.embed.fatiamento`): até `tokens_por_trecho` (450) tokens do próprio modelo, um trecho; acima disso, janelas com `sobreposicao_tokens` (50) em comum, cortadas pelas posições dos tokens no texto original.
+- **Avaliação** (`buscajus eval pool|metricas`): monta um índice temporário com os acórdãos ativos do banco: um sistema vetorial em memória por modelo (cada acórdão pontuado pelo melhor trecho) e o full-text do Postgres (OR entre lexemas, `ts_rank_cd`). O `pool` exporta o top-20 de cada sistema em CSV para julgamento (0 a 2), e o `metricas` calcula nDCG@10, Recall@50, MRR e latência p50/p95 com a planilha julgada. O CSV traz o início das ementas e é arquivo de trabalho, fora do repositório. O conjunto de consultas (F3-01) é `backend/eval/consultas.yaml`, ainda pendente de revisão jurídica.
 
 ---
 

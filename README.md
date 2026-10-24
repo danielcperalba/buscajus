@@ -93,6 +93,24 @@ uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-
 - O agendador do `worker` (DJEN: coleta diária e checagem de versões; TJDFT: dia mais recente, reconsulta do anterior e recoleta dos últimos 30 dias) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
 - A tabela de classes processuais (`classe_cnj`) vem da TPU do CNJ, num arquivo versionado. Para atualizá-la: `uv run python scripts/atualizar_tpu.py` (em `backend/`) e uma migração que chame `carregar_tpu`.
 
+### Avaliação da busca (Fase 3)
+
+```bash
+# Modelos de embedding ficam num grupo opcional (torch CPU)
+uv sync --group embeddings
+
+# Pool top-20 de cada sistema para julgamento (planilha CSV com a coluna relevancia)
+uv run buscajus eval pool --consultas eval/consultas.yaml --saida pool.csv \
+    --modelo intfloat/multilingual-e5-base@<revisão> [--modelo ...] [--limite 50000]
+
+# nDCG@10, Recall@50, MRR e latência com a planilha julgada
+uv run buscajus eval metricas --consultas eval/consultas.yaml --julgamentos julgado.csv --modelo ...
+```
+
+- O pool traz o início das ementas: mantenha o CSV fora do repositório.
+- `eval/consultas.yaml` é uma proposta inicial, pendente de revisão jurídica (F3-01).
+- Testes com o modelo real minúsculo: `uv run pytest -m modelo` (exigem o grupo `embeddings`).
+
 ### Frontend
 
 ```bash
