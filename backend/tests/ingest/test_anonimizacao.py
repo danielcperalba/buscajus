@@ -26,7 +26,9 @@ from fixtures.djen import dados, item_ementa
 from .anonimizacao_ajuda import DetectorFalso
 
 CASOS = json.loads(
-    (Path(__file__).parents[1] / "fixtures/anonimizacao/casos_pf_pj.json").read_text()
+    (Path(__file__).parents[1] / "fixtures/anonimizacao/casos_pf_pj.json").read_text(
+        encoding="utf-8"
+    )
 )["casos"]
 
 

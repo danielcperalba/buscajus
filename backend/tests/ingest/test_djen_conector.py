@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import logging
+import os
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -441,6 +442,9 @@ def test_worker_apaga_orfaos_ao_iniciar(tmp_path: Path) -> None:
     assert area_vazia(area)
 
 
+@pytest.mark.skipif(
+    os.name != "posix", reason="permissão 0700 só existe em POSIX; o worker roda em Linux"
+)
 def test_area_temporaria_criada_com_permissao_restrita(tmp_path: Path) -> None:
     caminho = temporario.novo_arquivo(tmp_path / "nova", "TJPR")
     assert caminho.parent.stat().st_mode & 0o777 == 0o700

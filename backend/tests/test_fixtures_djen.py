@@ -36,25 +36,53 @@ def caderno() -> list[dict[str, Any]]:
     return itens(f"caderno-{dados.DATA}-v1.zip")
 
 
+def _comparavel(nome: str, conteudo: bytes) -> Any:
+    # Os bytes do DEFLATE variam com a zlib de cada plataforma, e o hash dos metadados vem
+    # desses bytes; por isso compara o conteúdo do ZIP e os metadados sem o hash.
+    if nome.endswith(".zip"):
+        with zipfile.ZipFile(io.BytesIO(conteudo)) as zf:
+            return [(i.filename, i.date_time, i.compress_type, zf.read(i)) for i in zf.infolist()]
+    if nome.startswith("metadados-"):
+        objeto = json.loads(conteudo)
+        objeto.pop("hash")
+        return objeto
+    return conteudo
+
+
 def test_arquivos_versionados_batem_com_o_gerador() -> None:
     esperados = arquivos()
     presentes = {p.name for p in PASTA.iterdir() if p.suffix in {".zip", ".json"}}
     assert presentes == set(esperados)
-    divergentes = [n for n, c in esperados.items() if (PASTA / n).read_bytes() != c]
+    divergentes = [
+        n
+        for n, c in esperados.items()
+        if _comparavel(n, (PASTA / n).read_bytes()) != _comparavel(n, c)
+    ]
     assert divergentes == [], "rode `uv run python -m fixtures.djen` em backend/tests"
 
 
+def test_hash_dos_metadados_confere_com_o_zip_versionado() -> None:
+    for caminho in PASTA.glob("metadados-*.json"):
+        meta = json.loads(caminho.read_text(encoding="utf-8"))
+        zip_versionado = PASTA / f"caderno-{meta['data']}-v{meta['versao']}.zip"
+        esperado = hashlib.sha256(zip_versionado.read_bytes()).hexdigest()
+        if caminho.name.endswith("-hash-incorreto.json"):
+            assert meta["hash"] != esperado, caminho.name
+        else:
+            assert meta["hash"] == esperado, caminho.name
+
+
 def test_metadados_e_hash(caderno: list[dict[str, Any]]) -> None:
-    meta = json.loads((PASTA / f"metadados-{dados.DATA}-v1.json").read_text())
+    meta = json.loads((PASTA / f"metadados-{dados.DATA}-v1.json").read_text(encoding="utf-8"))
     conteudo = (PASTA / f"caderno-{dados.DATA}-v1.zip").read_bytes()
     assert meta["hash"] == hashlib.sha256(conteudo).hexdigest()
     assert meta["total_comunicacoes"] == len(caderno)
-    errado = json.loads((PASTA / f"metadados-{dados.DATA}-v1-hash-incorreto.json").read_text())
-    assert errado["hash"] != meta["hash"]
-    assert (
-        json.loads((PASTA / f"metadados-{dados.DATA}-nao-processado.json").read_text())["status"]
-        != "Processado"
+    errado = json.loads(
+        (PASTA / f"metadados-{dados.DATA}-v1-hash-incorreto.json").read_text(encoding="utf-8")
     )
+    assert errado["hash"] != meta["hash"]
+    nao_processado = PASTA / f"metadados-{dados.DATA}-nao-processado.json"
+    assert json.loads(nao_processado.read_text(encoding="utf-8"))["status"] != "Processado"
 
 
 def test_tipo_documento_vem_escapado_no_json() -> None:

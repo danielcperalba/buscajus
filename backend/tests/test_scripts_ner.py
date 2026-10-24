@@ -117,7 +117,7 @@ def test_relatorio_so_tem_agregados(
     relatorio = tmp_path / "avaliacao-ner.md"
     args = argparse.Namespace(entrada=entrada, relatorio=relatorio, spacy="x", lenerbr="y")
     assert avaliacao.cmd_avaliar(args) == 0
-    conteudo = relatorio.read_text()
+    conteudo = relatorio.read_text(encoding="utf-8")
     assert "## spacy" in conteudo and "limiar 0.9" in conteudo
     normalizado = chave(conteudo)
     nomes = [*dados.NOMES_CAMADA_1, *dados.NOMES_CAMADA_2, *dados.RELATORES, "Bonifacio Cardeal"]
@@ -152,4 +152,6 @@ def test_amostragem_recusa_ci_e_repositorio(
 
 
 def test_pasta_privada_esta_no_gitignore() -> None:
-    assert "ner-avaliacao-privado/" in (REPO / ".gitignore").read_text().splitlines()
+    assert (
+        "ner-avaliacao-privado/" in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
+    )

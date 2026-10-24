@@ -1,0 +1,5 @@
+# Texto sempre com LF, inclusive em clones no Windows (o CI e o Prettier esperam LF).
+* text=auto eol=lf
+*.zip binary
+*.gz binary
+*.ico binary
