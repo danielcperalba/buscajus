@@ -174,7 +174,7 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 
 **Fluxo por caderno**
 
-1. Consulta os metadados do caderno de `(tribunal, data)` (JSON de ~750 bytes). Dia sem caderno (fim de semana, feriado) → `sem_caderno`. Se o `status` indicar que o caderno ainda não está pronto → nova tentativa mais tarde.
+1. Consulta os metadados do caderno de `(tribunal, data)` (JSON de ~750 bytes). Dia sem caderno (HTTP 404 ou `status` "Sem comunicações": fim de semana, feriado) → `sem_caderno`. Se o `status` indicar que o caderno ainda não está pronto ("Não Processado", "Em processamento"), ou se o 404 for do dia corrente → `pendente`, nova tentativa mais tarde. `status` "Cancelado" ou desconhecido → `erro`, para revisão humana.
 2. Se `versao` e `hash` forem iguais aos do último processamento → nada a fazer.
 3. Download em streaming, pela URL temporária, para a **área temporária** (`tmp-cadernos`, tmpfs, nunca persistida nem incluída em backup). A URL temporária não é gravada nem logada.
 4. Calcula o SHA-256 do arquivo e compara com `hash`. Se divergir: apaga, tenta de novo (até 3 vezes, com metadados novos) e, persistindo, marca `erro`.
@@ -191,7 +191,7 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 - Segundo a documentação, a `versao` sobe quando o diário é reprocessado por cancelamento. Se a `versao` de um caderno mudar, o dia é **reprocessado inteiro**.
 - O job diário processa o caderno novo e **verifica a `versao` dos cadernos dos últimos 30 dias** pelos metadados (~22 KB/dia por tribunal), baixando de novo só os que mudaram.
 - **Risco residual aceito**: em 42 dias úteis do TJPR, todos os cadernos estavam na versão 1, então o aumento de versão por cancelamento ainda não foi observado na prática. Cancelamentos que não mudem a versão, ou que ocorram depois de 30 dias, podem passar despercebidos. Os campos de cancelamento dos itens continuam sendo respeitados sempre que um caderno é processado.
-- Um acórdão presente na versão anterior e ausente na nova é conferido individualmente via `GET /api/v1/comunicacao`. Se estiver cancelado ou não for encontrado, fica `cancelado`.
+- Um acórdão presente na versão anterior e ausente na nova é conferido individualmente via `GET /api/v1/comunicacao` (filtros `siglaTribunal`, `numeroProcesso` e a data de disponibilização como início e fim; a comunicação é identificada pelo `id` na resposta). Se estiver cancelado ou não for encontrado, fica `cancelado`.
 - Um item é considerado cancelado se `ativo == false`, ou `data_cancelamento` não for nulo, ou `status` estiver no conjunto de valores de cancelamento documentado no Swagger.
 - Um acórdão cancelado sai da busca (seção 4.5).
 
