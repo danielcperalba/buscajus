@@ -1,5 +1,6 @@
 """Fluxo completo do DJEN com o banco: F1-16, F1-23 a F1-28."""
 
+import gzip
 import json
 from collections import Counter
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlalchemy import Engine, text
 from buscajus import cli
 from buscajus.core.config import Config
 from buscajus.db.engine import obter_engine
+from buscajus.ingest import remocao
 from buscajus.ingest.anonimizacao.pipeline import criar_anonimizador
 from buscajus.ingest.djen import fabrica
 from buscajus.ingest.djen.parser import VERSAO_PARSER
@@ -249,3 +251,104 @@ def test_anomalia_e_texto_nulo_nao_derrubam_o_caderno(
         "900001": f"quarentena:{MOTIVO_ANOMALIA}",
         "900003": "ativo:",
     }
+
+
+@respx.mock(assert_all_called=False)
+def test_cli_djen_imprime_so_o_resumo_json(
+    banco: Engine,
+    config: Config,
+    url_banco_teste: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    respx_mock: respx.MockRouter,
+) -> None:
+    _servir(respx_mock, 1)
+    original = fabrica.criar_coleta
+
+    def criar(config: Config, engine: Engine) -> fabrica.ColetaDjen:
+        coleta = original(config, engine, anonimizador=criar_anonimizador(DetectorFalso()))
+        coleta.conector._hoje = lambda: HOJE
+        return coleta
+
+    monkeypatch.setattr(fabrica, "criar_coleta", criar)
+    monkeypatch.setenv("BUSCAJUS_DATABASE_URL", url_banco_teste)
+    monkeypatch.setenv("BUSCAJUS_DIRETORIO_RAW", str(config.diretorio_raw))
+    monkeypatch.setenv("BUSCAJUS_DIRETORIO_TMP_CADERNOS", str(config.diretorio_tmp_cadernos))
+    monkeypatch.setenv("BUSCAJUS_DJEN__URL_API", URL_API)
+    monkeypatch.setenv("BUSCAJUS_DJEN__REQUISICOES_POR_SEGUNDO", "1000")
+    obter_engine.cache_clear()
+    try:
+        codigo = cli.main(
+            ["ingest", "djen", "--tribunal", "TJPR", "--de", dados.DATA, "--ate", dados.DATA]
+        )
+    finally:
+        obter_engine.cache_clear()
+    assert codigo == 0
+    saida = capsys.readouterr()
+    (resumo,) = json.loads(saida.out)  # stdout é só o resumo JSON
+    assert resumo["resultado"] == "concluida"
+    assert '"unidade finalizada"' in saida.err  # os logs vão para stderr
+
+
+def _conteudo_em_disco(raiz: Path) -> str:
+    return "\n".join(
+        gzip.decompress(arquivo.read_bytes()).decode("utf-8")
+        for arquivo in sorted(raiz.rglob("*.jsonl.gz"))
+    )
+
+
+@respx.mock(assert_all_called=False)
+def test_remocao_apaga_o_conteudo_e_reprocessamento_respeita_o_bloqueio(
+    coleta: fabrica.ColetaDjen, banco: Engine, config: Config, respx_mock: respx.MockRouter
+) -> None:
+    """F2-13: nada do removido sobra no banco nem no disco, nem depois de reprocessar."""
+    _servir(respx_mock, 1, 1)
+    _processar_v1(coleta)
+    with banco.connect() as conexao:
+        alvo = conexao.execute(
+            text("SELECT id, ementa FROM acordao WHERE id_fonte = '900001'")
+        ).one()
+    trecho = alvo.ementa[:60]
+    assert '"id":900001' in _conteudo_em_disco(config.diretorio_raw)
+
+    with banco.begin() as conexao:
+        assert remocao.remover(conexao, coleta.bruto, [alvo.id], "pedido de remoção aceito") == [
+            alvo.id
+        ]
+
+    def verificar() -> None:
+        with banco.connect() as conexao:
+            linha = conexao.execute(
+                text("SELECT situacao::text AS sit, ementa, decisao FROM acordao WHERE id = :id"),
+                {"id": alvo.id},
+            ).one()
+            assert (linha.sit, linha.ementa, linha.decisao) == ("removido", "", None)
+            assert (
+                conexao.scalar(text("SELECT count(*) FROM bloqueio WHERE id_fonte = '900001'")) == 1
+            )
+            banco_inteiro = str(conexao.scalar(text("SELECT json_agg(a)::text FROM acordao a")))
+            historico = str(
+                conexao.scalar(text("SELECT json_agg(h)::text FROM acordao_historico h"))
+            )
+            bruta = conexao.execute(text("SELECT itens FROM coleta_bruta")).scalar_one()
+        disco = _conteudo_em_disco(config.diretorio_raw)
+        assert trecho not in banco_inteiro + historico
+        assert '"id":900001' not in disco and '"id":"900001"' not in disco
+        assert bruta == 19  # coleta_bruta acompanha o arquivo reescrito
+
+    verificar()
+    reprocessar_cadernos(
+        banco,
+        coleta.bruto,
+        coleta.processador,
+        de=DIA,
+        ate=DIA,
+        versao_parser=VERSAO_PARSER,
+    )
+    verificar()
+    # Recoleta do caderno: o item volta no ZIP, é recusado pelo bloqueio e sai do bruto.
+    (resumo,) = coleta.orquestrador.executar(
+        coleta.conector.planejar("TJPR", DIA, DIA), forcar=True
+    )
+    assert resumo.contadores.bloqueados == 1
+    verificar()

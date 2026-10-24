@@ -36,6 +36,7 @@ from buscajus.ingest.conector import (
 )
 from buscajus.ingest.estado import Repositorio, registrar_coleta_bruta, repositorio_para
 from buscajus.ingest.http import Estatisticas
+from buscajus.ingest.remocao import CAMPO_ID, atualizar_coleta_bruta
 
 log = logging.getLogger(__name__)
 
@@ -152,6 +153,15 @@ class Orquestrador:
                     )
                     if self._processar is not None:
                         lote.contadores.somar(self._processar(conexao, lote, id_bruta))
+                    if lote.contadores.ids_bloqueados:
+                        # Conteúdo bloqueado não fica no bruto (F2-13).
+                        reescrito = self._bruto.reescrever_sem(
+                            lote.caminho_bruto,
+                            CAMPO_ID[unidade.fonte],
+                            lote.contadores.ids_bloqueados,
+                        )
+                        if reescrito is not None:
+                            atualizar_coleta_bruta(conexao, reescrito)
                     repo.registrar_lote(conexao, id_unidade, lote)
                 resumo.contadores.somar(lote.contadores)
                 resumo.lotes += 1

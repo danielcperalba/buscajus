@@ -53,6 +53,7 @@ class ProcessadorAcordaos:
             )
             if resultado is Resultado.BLOQUEADO:
                 contadores.bloqueados += 1
+                contadores.ids_bloqueados.append(acordao.id_fonte)
             elif cancelado:
                 contadores.cancelados += 1
             elif anomalia:

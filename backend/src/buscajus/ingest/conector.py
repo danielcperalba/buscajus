@@ -62,6 +62,9 @@ class Contadores:
     bloqueados: int = 0
     # Estado da fonte não reconhecido (ex.: status desconhecido): vai para a quarentena.
     anomalias: int = 0
+    # Ids (da fonte) dos itens recusados por bloqueio, só em memória: o arquivo bruto do lote
+    # é reescrito sem eles (F2-13). Só a contagem (bloqueados) é gravada.
+    ids_bloqueados: list[str] = field(default_factory=list)
 
     def somar(self, outro: "Contadores") -> None:
         self.recebidos += outro.recebidos
@@ -74,6 +77,7 @@ class Contadores:
         self.cancelados += outro.cancelados
         self.bloqueados += outro.bloqueados
         self.anomalias += outro.anomalias
+        self.ids_bloqueados.extend(outro.ids_bloqueados)
 
 
 @dataclass(frozen=True)

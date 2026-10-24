@@ -3,7 +3,8 @@
 Para cada acórdão normalizado:
 
 1. Bloqueio (``fonte + id_fonte`` ou ``numero_processo``) → não grava (F1-27); se a linha
-   já existe, fica ``removido``.
+   já existe, fica ``removido`` e perde ementa e decisão (F2-13). O arquivo bruto do lote é
+   reescrito sem o item por quem chamou (orquestrador ou reprocessamento).
 2. Linha nova → ``INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING``.
 3. Mesmo ``hash_conteudo`` → só o estado (ativo, status, cancelamento, situação, coleta).
 4. Hash diferente → a versão atual vai para ``acordao_historico`` e ``versao += 1``.
@@ -28,6 +29,7 @@ from enum import StrEnum
 from sqlalchemy import Connection, text
 
 from buscajus.ingest.modelos import AcordaoNormalizado
+from buscajus.ingest.remocao import apagar_conteudo
 
 # Situações definidas fora da coleta, que a recoleta não desfaz.
 SITUACOES_PERSISTENTES = ("removido", "duplicado")
@@ -189,15 +191,17 @@ def upsert(
 ) -> Resultado:
     chave = {"fonte": acordao.fonte, "id_fonte": acordao.id_fonte}
     if bloqueado(conexao, acordao):
-        conexao.execute(
+        removidos = conexao.scalars(
             text("""
                 UPDATE acordao SET situacao = 'removido', motivo_situacao = 'bloqueio',
                     atualizado_em = now()
                 WHERE fonte = CAST(:fonte AS fonte) AND id_fonte = :id_fonte
                   AND situacao <> 'removido'
+                RETURNING id
             """),
             chave,
-        )
+        ).all()
+        apagar_conteudo(conexao, list(removidos))
         return Resultado.BLOQUEADO
 
     situacao, motivo = situacao_coletada(cancelado, motivos_pii, anomalia=anomalia)

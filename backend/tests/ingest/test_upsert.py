@@ -116,7 +116,9 @@ def test_bloqueio_depois_da_coleta_remove_e_nao_reinsere(banco: Engine) -> None:
         assert (linha.sit, linha.motivo_situacao) == ("removido", "bloqueio")
         alterado = dataclasses.replace(ACORDAO, ementa=ACORDAO.ementa + " Nova versão.")
         assert _upsert(conexao, alterado) is Resultado.BLOQUEADO
-        assert _linha(conexao).ementa == ACORDAO.ementa
+        # F2-13: o removido perde a ementa e a decisão; a nova versão não entra.
+        linha = _linha(conexao)
+        assert (linha.ementa, linha.decisao, linha.versao) == ("", None, 1)
 
 
 @pytest.mark.parametrize("situacao", ["removido", "duplicado"])

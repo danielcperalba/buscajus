@@ -47,11 +47,12 @@ def criar_coleta(
         classes = nomes_por_codigo(conexao)
     cliente = ClienteHttp(config.http, config.tjdft.requisicoes_por_segundo)
     conector = ConectorTjdft(config.tjdft, cliente, anonimizar)
+    bruto = ArmazenamentoBruto(config.diretorio_raw)
     orquestrador = Orquestrador(
         engine,
         conector,
-        ArmazenamentoBruto(config.diretorio_raw),
-        processar=ProcessadorTjdft(NormalizadorTjdft(classes)),
+        bruto,
+        processar=ProcessadorTjdft(NormalizadorTjdft(classes), bruto),
         estatisticas_http=cliente.estatisticas,
         versao_parser=VERSAO_NORMALIZACAO,
     )
