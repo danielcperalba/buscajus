@@ -1,0 +1,19 @@
+{
+  "name": "BuscaJus",
+  // Imagem padrão do Codespaces: Python, Node, pnpm e Docker (docker-in-docker).
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+
+  // uv com a mesma versão do Dockerfile do backend e do CI.
+  "postCreateCommand": "pipx install uv==0.13.4 && cd backend && uv sync && cd ../frontend && pnpm install --frozen-lockfile",
+
+  // Somente desenvolvimento: libera tráfego entre redes do Docker bloqueado pelo FORWARD DROP
+  // do Codespace (regras do iptables-legacy que só aceitam o docker0). Sem isso, os containers
+  // do compose não se conectam entre si. Idempotente; não falha onde não há iptables-legacy.
+  "postStartCommand": "sudo iptables-legacy -C FORWARD -i br-+ -j ACCEPT 2>/dev/null || sudo iptables-legacy -I FORWARD -i br-+ -j ACCEPT || true",
+
+  "forwardPorts": [3000, 8000],
+  "portsAttributes": {
+    "3000": { "label": "web" },
+    "8000": { "label": "api" }
+  }
+}

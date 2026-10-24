@@ -1,0 +1,52 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        exclude: ^frontend/pnpm-lock\.yaml$ # o lockfile do pnpm tem vários documentos YAML
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # Ruff e Prettier rodam com as versões travadas nos lockfiles, as mesmas do CI.
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check (backend)
+        entry: uv run --directory backend ruff check --fix .
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+      - id: ruff-format
+        name: ruff format (backend)
+        entry: uv run --directory backend ruff format .
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (frontend)
+        entry: pnpm --dir frontend exec prettier --check --ignore-unknown
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+
+      # Cadernos do DJEN contêm nomes de partes e nunca podem ser versionados.
+      # Só fixtures sintéticas, em backend/tests/fixtures/, podem ser ZIP.
+      - id: proibir-zip
+        name: proibir arquivos ZIP fora das fixtures sintéticas
+        entry: ZIP fora de backend/tests/fixtures/ não pode ser versionado
+        language: fail
+        files: \.zip$
+        exclude: ^backend/tests/fixtures/
+
+      - id: proibir-avaliacao-ner
+        name: proibir o conjunto de avaliação do NER
+        entry: o conjunto de avaliação do NER fica só no ambiente local restrito
+        language: fail
+        files: (^|/)ner-avaliacao-privado/

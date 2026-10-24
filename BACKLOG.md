@@ -1,0 +1,207 @@
+# BuscaJus — Backlog do MVP
+
+Backlog derivado do [ARCHITECTURE.md](ARCHITECTURE.md). Cada tarefa deve virar uma issue. Formato:
+
+- **ID** — título. Descrição curta. **Pronto quando:** critério de aceite. *Depende de:* IDs.
+
+Convenções:
+
+- Testes unitários fazem parte de cada tarefa (não ficam para a Fase 6). A Fase 6 cobre testes de integração, avaliação de qualidade e verificações transversais.
+- Tarefas marcadas **[spike]** são investigações com prazo curto; o resultado é registrado no ARCHITECTURE.md (seção 14) antes da implementação que depende delas.
+- As fases 1 e 2 podem andar em paralelo depois da Fase 0. A Fase 5 pode começar com dados *mock* assim que o contrato da API (F4-01) existir.
+- **Revisão 1 (22/10/2026)**: a Fase 1 foi refeita para a coleta por caderno diário do DJEN; as referências das demais fases foram atualizadas.
+- **Revisão 2 (22/10/2026)**: tarefas de anonimização (F1-34 a F1-38, F2-12), data inicial e carga histórica do TJPR (F1-32, F1-33). Os IDs são estáveis: tarefas novas recebem o próximo número da fase, mesmo quando aparecem no meio da lista.
+- **Revisão 3 (22/10/2026)**: classificação PF × PJ heurística com casos difíceis (F1-34), mascaramento de CPF (F1-39), condições do conjunto de avaliação do NER (F1-36) e registro da exclusão desse conjunto (F1-40).
+- **Revisão 4 (22/10/2026)**: F1-32 e F2-01 concluídos com os resultados registrados; conector TJDFT ajustado à API validada (F2-02, F2-04 a F2-08); carga histórica do TJPR desde 23/07/2025 (F1-33); regra de CPF reforçada (F1-39); reavaliação do segredo de justiça do TJDFT (F7-08). Correção posterior: `acordaos-tr` é subbase e `segredoJustica` é booleano (F2-01, F2-02, F2-06).
+
+---
+
+## Fase 0 — Setup
+
+- **F0-01** — Estrutura do repositório. Criar `backend/` (pacote Python `buscajus` com `api/`, `ingest/`, `embed/`, `db/`, `core/`), `frontend/`, `compose.yaml` na raiz, `data/` (ignorado no git), `docs/`. O `.gitignore` inclui `data/` e `ner-avaliacao-privado/`. Atualizar `README.md` com visão geral e como rodar. **Pronto quando:** estrutura versionada e README descreve os diretórios.
+- **F0-02** — Projeto Python com `uv`. `pyproject.toml` com Python 3.12, dependências base (fastapi, uvicorn, sqlalchemy, psycopg, alembic, httpx, pydantic-settings, lxml) e grupos `dev` (pytest, respx, ruff, mypy). **Pronto quando:** `uv sync` e `uv run pytest` funcionam com um teste trivial. *Depende de:* F0-01.
+- **F0-03** — Lint e formatação do backend. Configurar `ruff` (lint + format) e `mypy` (modo estrito no pacote). **Pronto quando:** `uv run ruff check`, `ruff format --check` e `mypy` passam. *Depende de:* F0-02.
+- **F0-04** — Projeto Next.js. App Router, TypeScript, `pnpm`, ESLint, Prettier. **Pronto quando:** `pnpm lint`, `pnpm typecheck` e `pnpm build` passam. *Depende de:* F0-01.
+- **F0-05** — Docker Compose com Postgres + pgvector. Serviço `db` com `pgvector/pgvector:pg16`, volume persistente, healthcheck. **Pronto quando:** `docker compose up db` sobe e `CREATE EXTENSION vector` funciona. *Depende de:* F0-01.
+- **F0-06** — Imagens da `api` e do `worker`. Dockerfile único (Python slim; o torch CPU só entra com o modelo, em F3-12), com comandos de entrada para `api`, `worker` e `migracoes`; volumes `raw` e `models`; **tmpfs `tmp-cadernos`** no `worker`, fora de volumes persistentes. **Pronto quando:** `docker compose up` sobe `db`, `api` (com `/api/v1/saude` respondendo) e `worker` (ocioso). *Depende de:* F0-05, F0-02.
+- **F0-07** — Imagem do `web` no Compose. **Pronto quando:** `docker compose up` serve o Next.js apontando para a `api`. *Depende de:* F0-04, F0-06.
+- **F0-08** — Configuração por ambiente. `pydantic-settings` com `.env.example` versionado (conexão, tribunais por conector, `djen.inicio_ementas` por tribunal, taxas, modelo, flags, diretório temporário). Validação que rejeita `TJDFT` no conector DJEN enquanto o conector TJDFT estiver ativo. **Pronto quando:** a aplicação falha cedo, com mensagem clara, em configuração inválida. *Depende de:* F0-02.
+- **F0-09** — Alembic e migração inicial de extensões. Extensões `vector`, `unaccent`, `pg_trgm` e configuração de texto `pt_unaccent`. **Pronto quando:** `alembic upgrade head` em banco vazio cria tudo; teste verifica `to_tsvector('pt_unaccent','Herança')` = `'heranc'`. *Depende de:* F0-05, F0-02.
+- **F0-10** — CI básico (GitHub Actions). Jobs: backend (ruff, mypy, pytest com serviço Postgres+pgvector) e frontend (lint, typecheck, build). **Pronto quando:** um PR roda os dois jobs e falha em erro de lint/teste. *Depende de:* F0-03, F0-04, F0-09.
+- **F0-11** — Pre-commit. Hooks de ruff, prettier e checagem de arquivos grandes/segredos (bloqueia `*.zip` fora de fixtures sintéticas). **Pronto quando:** `pre-commit run --all-files` passa. *Depende de:* F0-03, F0-04.
+- **F0-12** — Logging estruturado. Logs JSON com nível configurável; política de não logar conteúdo de comunicações nem consultas completas. **Pronto quando:** utilitário de log usado pela `api` e pelo `worker`. *Depende de:* F0-02.
+
+---
+
+## Fase 1 — Ingestão DJEN (tribunal inicial: TJPR)
+
+### Investigação
+
+- **F1-01 [spike]** — Detalhar o caderno do DJEN. Os metadados já são conhecidos (JSON com `versao`, `hash`, `status`, `total` e URL temporária). Falta documentar: valores de `status` do caderno (pronto ou não) e de cancelamento das comunicações, comportamento em dia sem caderno, validade da URL temporária, estrutura interna do ZIP (arquivos, formato, campos de cada comunicação; os destinatários trazem só nome e polo, sem `cpf_cnpj`) e variações dos rótulos do cabeçalho (`Processo`, `Relator(a)`, `Data do Julgamento`). Nada do conteúdo do ZIP é guardado durante o spike. **Pronto quando:** seção 3.2 do ARCHITECTURE.md atualizada.
+- **F1-02 [spike]** — Fixtures sintéticas do caderno. Montar um ZIP reduzido no formato real, com ~20 ementas baseadas em ementas reais **sem nomes de pessoas** e comunicações de outros tipos, usando só **nomes fictícios marcadores** em `destinatarios`, `destinatarioadvogados` e no texto. Para a anonimização, incluir ementas que citam os destinatários no texto (caixa alta, sem acento, com entidades HTML, nome parcial, só primeiro e último nome), destinatários PJ e entes públicos, os casos difíceis de F1-34 (MEI, `FULANO 12345678900`, razão social com nome de pessoa, espólio, massa falida, condomínio), CPF fictício no texto com e sem formatação, nome do relator, ministros citados em precedentes e epônimos (`Lei Maria da Penha`). Outras variações: ementa sem tabela, sem data de julgamento, item cancelado. Metadados JSON com `hash` correto e incorreto e duas versões do mesmo dia. Também respostas de `/comunicacao` (checagem pontual) e de 429. **Nunca versionar um caderno real.** **Pronto quando:** fixtures em `backend/tests/fixtures/djen/` sem nenhum dado pessoal real. *Depende de:* F1-01.
+- **F1-32 [spike, concluído]** — Data inicial das ementas de acórdão do TJPR. **Resultado: 23/07/2025** (0 em 21 e 22/07; 1.342 em 23/07; 1.109 em 24/07; 1.680 em 25/07), registrado na seção 3.2 do ARCHITECTURE.md. O valor `djen.inicio_ementas.TJPR = 2025-07-23` entra no `.env.example` em F0-08.
+
+### Modelo e infraestrutura de coleta
+
+- **F1-03** — Migração das tabelas de coleta. `caderno_djen`, `coleta_janela`, `coleta_bruta`, `tarefa`. **Pronto quando:** migração aplicada e revertida em teste. *Depende de:* F0-09.
+- **F1-04** — Migração das tabelas `acordao` e `acordao_historico`. Conforme a seção 4.2 (incluindo `link_tribunal`, colunas de anonimização, `busca_tsv`, índices e enums), sem `acordao_trecho` (Fase 3). **Pronto quando:** migração aplicada; teste de esquema confirma a ausência de colunas de partes/advogados. *Depende de:* F1-03.
+- **F1-05** — Migração das tabelas `bloqueio` e `pedido_remocao`. **Pronto quando:** migração aplicada. *Depende de:* F1-04.
+- **F1-06** — Cliente HTTP com rate limit. Wrapper `httpx` com *token bucket* por fonte, timeouts (longos para download), User-Agent identificável e leitura de `x-ratelimit-limit`/`x-ratelimit-remaining` com pausa preventiva quando o restante chega a zero. **Pronto quando:** testes mostram que as chamadas respeitam a taxa e pausam com `remaining=0`. *Depende de:* F0-08.
+- **F1-07** — Tratamento de 429 e erros transitórios. 429 → `Retry-After` ou 60 s; 5xx/timeout com backoff curto; máximo de tentativas. **Pronto quando:** testes com `respx` cobrem 429 com e sem `Retry-After`, 503 e timeout (relógio simulado). *Depende de:* F1-06.
+- **F1-08** — Armazenamento bruto filtrado. Grava só itens aceitos, já anonimizados e com lista branca aplicada, em JSONL.gz (DJEN: `data/raw/djen/{tribunal}/{data}/v{versao}.jsonl.gz`; TJDFT: por página) com sha256, e registra em `coleta_bruta`. **Pronto quando:** teste confirma que o arquivo só contém campos da lista branca. *Depende de:* F1-03.
+- **F1-09** — Protocolo `Conector` e orquestrador genérico. Interface da seção 3.4 (unidades de coleta, lotes, checkpoint opcional por página); o runner persiste o estado das unidades, aplica rate limit, grava o bruto e chama o processamento. **Pronto quando:** um conector *fake* em teste percorre unidades com e sem paginação. *Depende de:* F1-03, F1-07, F1-08.
+- **F1-10** — Retomada de coleta. Unidades concluídas são puladas, salvo com `--forcar`; caderno interrompido é reprocessado inteiro; unidade paginada continua da `ultima_pagina + 1`. **Pronto quando:** testes de interrupção nos dois modos. *Depende de:* F1-09.
+
+### Conector DJEN (caderno diário)
+
+- **F1-11** — Planejamento de cadernos. Parametrizado por sigla do tribunal; uma unidade por dia no intervalo, do mais recente ao mais antigo, sem passar da data de início das ementas do tribunal (`djen.inicio_ementas`); dia sem caderno registrado como `sem_caderno`; caderno com zero ementas de acórdão é `processado` com `acordaos_aceitos = 0`, não erro. **Pronto quando:** teste do planejamento para 90 dias, do caso sem caderno e do caderno sem ementas. *Depende de:* F1-09, F1-01.
+- **F1-12** — Metadados e download do caderno. `GET /api/v1/caderno/{sigla}/{data}/D` (JSON com `versao`, `hash`, `status`, `total`, URL temporária); caderno não pronto é reagendado; download em streaming pela URL temporária para `tmp-cadernos`, com limite de tamanho e um caderno por vez. A URL temporária não é gravada nem logada. **Pronto quando:** teste com fixture grava o arquivo só na área temporária e trata `status` não pronto. *Depende de:* F1-11, F1-06, F1-02.
+- **F1-13** — Validação SHA-256. Compara o hash do arquivo com o campo `hash`; se divergir, apaga e tenta de novo (até 3 vezes) e então marca `erro`. **Pronto quando:** testes com hash correto e incorreto. *Depende de:* F1-12.
+- **F1-14** — Leitura em streaming e filtro "Ementa de Acórdão". Percorre as entradas do ZIP sem carregar o caderno inteiro em memória e confere a quantidade com `total`; descarta em memória, sem log, toda comunicação que não for ementa de acórdão; as aceitas seguem, com `destinatarios` só em memória, para a anonimização (F1-35 a F1-38). Contadores: comunicações lidas e acórdãos aceitos. **Pronto quando:** teste com a fixture aceita só as ementas e nenhuma comunicação descartada deixa rastro em disco ou log. *Depende de:* F1-13.
+- **F1-15** — Descarte garantido do ZIP. Remoção em `finally` (sucesso e erro) e limpeza de órfãos da área temporária no início do `worker`. **Pronto quando:** testes confirmam a área vazia após sucesso, após exceção no parser e após reinício com arquivo órfão. *Depende de:* F1-12.
+- **F1-16** — Controle de versão do caderno. Guardar `versao`/`hash` em `caderno_djen`; job que verifica a versão dos últimos 30 dias pelos metadados (~22 KB/dia) e reprocessa o dia quando `versao` muda; acórdãos que sumiram da nova versão vão para checagem pontual (F1-17). **Pronto quando:** teste com duas versões do mesmo dia atualiza, versiona e encaminha os ausentes. *Depende de:* F1-14, F1-26.
+- **F1-17** — Checagem pontual via `/comunicacao`. Cliente para conferir o estado de uma comunicação específica (lendo só `ativo`, `status`, `data_cancelamento`, sem gravar a resposta). Usado por F1-16 e na apuração de pedidos de remoção; **nunca** para coleta em massa. **Pronto quando:** teste com fixture marca o acórdão como cancelado quando aplicável. *Depende de:* F1-06, F1-02.
+
+### Anonimização (obrigatória, antes de qualquer gravação)
+
+- **F1-34** — Classificação PF × PJ dos destinatários (heurística). Como a consulta pública só traz nome e polo, o classificador decide pelo nome e devolve `PF`, `PJ` ou `ambíguo`, conforme a seção 6.3 do ARCHITECTURE.md: marcadores societários, setoriais e de ente público → PJ (razão social com nome de pessoa continua PJ); empresário individual/MEI (`… ME`, `… MEI`, `… EI`, nome + 11 dígitos) e espólio → PF, com o sufixo e o número removidos para casar no texto; na dúvida, `ambíguo`, tratado como PF. **Pronto quando:** teste com um conjunto fixo de casos difíceis versionado (MEI, razão social com nome de pessoa, órgãos públicos, espólio, massa falida, condomínio), cada um com a classe esperada. *Depende de:* F1-02.
+- **F1-35** — Camada 1: nomes dos destinatários → iniciais. Substitui no `texto` os nomes de destinatários e advogados pessoa física da própria comunicação por iniciais (`J.S.S.`, ignorando partículas). Atua sobre os nós de texto do HTML (entidades decodificadas) e re-serializa; casamento sem acento e sem caixa, nome completo e subsequências de 2+ tokens; não altera o relator nem os rótulos do cabeçalho. **Pronto quando:** testes com todas as variações da fixture. *Depende de:* F1-34, F1-18.
+- **F1-36 [spike]** — Escolha do modelo de NER de pessoas. Conjunto de avaliação nas condições da seção 6.3 do ARCHITECTURE.md:
+  - só ~300 ementas já processadas pela camada 1, guardando apenas o texto da ementa e o rótulo do estrato, sem número do processo, link ou destinatários;
+  - amostra estratificada (~50% câmaras criminais, ~25% família, ~25% cível);
+  - ambiente local restrito aos anotadores, disco criptografado, fora do repositório e do CI (`ner-avaliacao-privado/` no `.gitignore`);
+  - nada enviado a serviços de anotação ou APIs de IA de terceiros, e pré-anotação só com modelo local;
+  - data de exclusão fixada na abertura da issue.
+
+  Comparar modelos locais (treinados no LeNER-Br; spaCy `pt_core_news_lg`) e definir meta de recall, limiar e lista de exceções. **Pronto quando:** relatório em `docs/avaliacao-ner.md` só com métricas agregadas e a decisão (sem nenhum trecho de ementa), e modelo fixado. *Depende de:* F1-35, F1-14.
+- **F1-37** — Camada 2: NER de pessoas. Substitui por iniciais as entidades `PESSOA` detectadas, exceto relator, magistrados em citações de precedentes (`Rel.`, `Min.`, `Des.`) e epônimos da lista curada. Componente reutilizável pelo TJDFT (F2-12). **Pronto quando:** testes com a fixture e meta de recall de F1-36 atingida no conjunto anotado. *Depende de:* F1-36.
+- **F1-39** — Mascaramento de CPF. Qualquer CPF no texto vira `***.***.***-**`, pertença ou não a um destinatário: o formato `000.000.000-00` é sempre mascarado; uma sequência de 11 dígitos sem formatação só é mascarada se não estiver colada a outros dígitos (nenhum dígito imediatamente antes ou depois) **e** tiver dígitos verificadores válidos. Componente reutilizável pelo TJDFT (F2-12). **Pronto quando:** testes com CPF formatado, sem formatação, dentro de nome de MEI, números de 11 dígitos que não são CPF e trechos de 11 dígitos com DV válido dentro de número de processo sem máscara (20 dígitos) e de CNPJ sem máscara (14 dígitos), que **não** podem ser mascarados. *Depende de:* F1-18.
+- **F1-40** — Exclusão do conjunto de avaliação do NER. Na data fixada em F1-36, apagar o conjunto e as anotações do ambiente restrito, mantendo só as métricas agregadas e a decisão do modelo. **Pronto quando:** exclusão registrada aqui no BACKLOG (data, responsável, método). *Depende de:* F1-36.
+- **F1-38** — Invariante, falha segura e lista branca. Após as camadas 1 e 2 e o mascaramento de CPF, verifica que nenhum nome de destinatário classificado como PF ou ambíguo sobrou no texto (comparação normalizada) e que não há CPF sem máscara. Se sobrar, o item não é gravado: é contado em `rejeitados_anonimizacao`, registrando só o `id` da comunicação. Só então aplica a lista branca, descartando `destinatarios` e `destinatarioadvogados`, e registra `anonimizacao_versao` e o número de substituições. **Pronto quando:** testes do caminho feliz e da falha segura. *Depende de:* F1-35, F1-37, F1-39, F1-08.
+
+### Limpeza e normalização
+
+- **F1-18** — Decodificação de HTML. `html.unescape` + segunda passada para entidades duplamente escapadas; NFC; remoção de caracteres de controle. **Pronto quando:** testes com `&Atilde;`, `&ccedil;`, `&nbsp;`, `&amp;Atilde;` e entidades numéricas. *Depende de:* F0-02.
+- **F1-19** — Extração do cabeçalho (Processo, Relator(a), Data do Julgamento). Lista branca de rótulos com variações; demais linhas descartadas; conferência do número com o campo estruturado; parse de `dd/mm/aaaa` com métrica para datas inválidas. **Pronto quando:** testes com fixtures e variações de rótulo; meta de extração da data ≥ 99% no caderno de referência. *Depende de:* F1-18, F1-02.
+- **F1-20** — Isolamento da ementa. Remove a tabela, converte blocos em quebras de linha, normaliza espaços; validação de tamanho mínimo; *fallback* sem tabela. **Pronto quando:** testes de ementa com e sem tabela; métricas de `falha_parser` e `fallback`. *Depende de:* F1-19.
+- **F1-21** — Normalização do número do processo. Só dígitos, máscara CNJ, validação do dígito verificador mod 97. **Pronto quando:** testes com números válidos, inválidos e com/sem máscara. *Depende de:* F0-02.
+- **F1-22** — Normalização de relator. Forma de exibição (títulos padronizados, *title case*) e `relator_chave`. **Pronto quando:** testes com títulos variados e nomes em caixa alta. *Depende de:* F0-02.
+- **F1-23** — Mapeamento DJEN → `AcordaoNormalizado`. Todos os campos da seção 5.2: `data_julgamento` do cabeçalho, `data_disponibilizacao`, `data_publicacao` nula, `link_oficial` = URL da certidão (`/api/v1/comunicacao/{hash}/certidao`), `link_tribunal` = campo `link`, `hash_conteudo`. **Pronto quando:** teste de ponta a ponta de um item de fixture até o objeto normalizado. *Depende de:* F1-20, F1-21, F1-22, F1-38.
+
+### Privacidade, upsert e cancelamentos
+
+- **F1-24** — Verificação de PII na ementa. Heurística da seção 6.4, como última rede depois da anonimização (e-mail, telefone, OAB, rótulos de parte e CPF residual, que já deveria ter sido mascarado em F1-39), levando a `situacao = 'quarentena'` com motivo. **Pronto quando:** testes positivos e negativos, incluindo termos jurídicos que não devem disparar. *Depende de:* F1-23.
+- **F1-25** — Upsert com versionamento. `ON CONFLICT (fonte, id_fonte)`; mesmo hash só atualiza o estado; hash diferente grava `acordao_historico` e incrementa `versao`. **Pronto quando:** testes de inserção, reinserção idêntica e alteração. *Depende de:* F1-04, F1-23.
+- **F1-26** — Tratamento de cancelamentos. `ativo=false`, `data_cancelamento` ou `status` de cancelamento → `situacao = 'cancelado'` (sem apagar a linha). **Pronto quando:** testes com item cancelado no caderno e com item cancelado numa nova versão. *Depende de:* F1-25, F1-01.
+- **F1-27** — Respeito a bloqueios. O upsert consulta `bloqueio` e não reinsere conteúdo removido. **Pronto quando:** teste de reprocessamento após bloqueio. *Depende de:* F1-05, F1-25.
+
+### Operação
+
+- **F1-28** — CLI de ingestão. `buscajus ingest djen --tribunal TJPR --de AAAA-MM-DD --ate AAAA-MM-DD [--forcar]` e `buscajus ingest reprocessar --fonte djen --de … --ate …` (reprocessa o parser a partir do bruto filtrado, sem rede). **Pronto quando:** comandos documentados no README. *Depende de:* F1-10, F1-15, F1-25, F1-38.
+- **F1-29** — Carga inicial de 90 dias do TJPR. Executar (~90 cadernos, ~5 GB transferidos) e registrar volumes: comunicações, ementas aceitas, substituições de anonimização (camadas 1 e 2), rejeitados pela falha segura, quarentena, cancelados, falhas de parser, cobertura da data de julgamento. **Pronto quando:** todos os cadernos `processado` ou `sem_caderno`, com relatório em `docs/`. *Depende de:* F1-28.
+- **F1-33** — Carga histórica do TJPR. Percorre **todos os dias úteis** do dia anterior à carga inicial até 23/07/2025, sem pular dias de volume baixo (há dias com 2 ou 22 ementas) e sem tratar dia vazio como erro; mesmo relatório de volumes, incluindo a distribuição diária. **Pronto quando:** todos os cadernos do período `processado` ou `sem_caderno`. *Depende de:* F1-29.
+- **F1-30** — Agendamento diário no `worker`. Processa o caderno novo assim que disponível e roda a checagem de versões (F1-16). **Pronto quando:** o agendador dispara as tarefas e registra a execução. *Depende de:* F1-28, F1-16.
+- **F1-31** — Relatório de coleta. `buscajus ingest status`: por caderno, versão, comunicações, acórdãos aceitos, quarentena, cancelados, falhas, 429; por janela TJDFT, totais equivalentes. **Pronto quando:** comando disponível. *Depende de:* F1-09.
+
+---
+
+## Fase 2 — Ingestão TJDFT
+
+- **F2-01 [spike, concluído]** — Validar a API do TJDFT. **Resultado** (seção 3.3 do ARCHITECTURE.md): `query` `""` ou `"*"`; filtros em `termosAcessorios` (`base`, `dataPublicacao`); `tamanho` máximo 40; paginação profunda funciona; `dataPublicacao` em UTC; `segredoJustica` booleano nos registros (`0`/`1` só nas agregações); turmas recursais dentro de `base = "acordaos"`, com `subbase = "acordaos-tr"` e `turmaRecursal = true`; URL estável `https://jurisdf.tjdft.jus.br/acordaos/{uuid}`.
+- **F2-02 [spike]** — Gravar respostas de referência do TJDFT. Inclui registro com `segredoJustica: true` (só o necessário para o teste, sem conteúdo identificável), registro real de turma recursal (`base = "acordaos"`, `subbase = "acordaos-tr"`, `turmaRecursal = true`), registro com `dataPublicacao` perto da meia-noite UTC, página cheia (40), última página parcial e página vazia. **Pronto quando:** fixtures em `backend/tests/fixtures/tjdft/`.
+- **F2-03** — Carga da tabela `classe_cnj`. Migração + seed a partir da TPU do CNJ (arquivo versionado com data de referência). **Pronto quando:** os `codigoClasseCnj` das fixtures resolvem para nome. *Depende de:* F0-09.
+- **F2-04** — Conector TJDFT: requisição e paginação. `POST` com `query: ""`, `pagina` (a partir de 0), `tamanho: 40` e `termosAcessorios` (`base=acordaos`, `dataPublicacao=AAAA-MM-DD`); total por `hits.value`; `tamanho` acima de 40 é rejeitado na configuração. **Pronto quando:** teste com fixtures percorre todas as páginas. *Depende de:* F1-09, F2-02.
+- **F2-05** — Conector TJDFT: coleta por dia de publicação e fuso. Uma unidade por dia de `dataPublicacao`, sem subdivisão. Conversão de `dataPublicacao`/`dataJulgamento` de UTC para America/Sao_Paulo antes de virar data. Coleta diária do dia mais recente com reconsulta do dia anterior, deduplicando por `uuid`; recoleta dos últimos 30 dias para mudanças de segredo. **Pronto quando:** testes da conversão de fuso (registro perto da meia-noite UTC) e da deduplicação entre dias reconsultados. *Depende de:* F2-04.
+- **F2-06** — Filtro de `segredoJustica` e de base. Só passa registro com `segredoJustica` exatamente `false` (regra defensiva) e `base = "acordaos"`; os demais são descartados antes do armazenamento bruto. **Pronto quando:** testes confirmam que registros com `true`, campo ausente, `null`, `1` ou `"S"` não geram arquivo bruto nem linha no banco, e que o registro real de turma recursal da fixture (`subbase = "acordaos-tr"`) é aceito e gravado com `turma_recursal = true`. *Depende de:* F2-04, F1-08.
+- **F2-07** — Segredo superveniente. Registro já indexado que volta com `segredoJustica: true` vira `removido` e perde os trechos. **Pronto quando:** teste de recoleta. *Depende de:* F2-06, F1-25.
+- **F2-08** — Mapeamento TJDFT → `AcordaoNormalizado`. Processo, relator, órgão, classe (via `classe_cnj`), datas, ementa, `decisao`, `turma_recursal` (de `turmaRecursal` ou `subbase = "acordaos-tr"`), `possuiInteiroTeor`, `link_oficial` = `https://jurisdf.tjdft.jus.br/acordaos/{uuid}`, `hash_conteudo`. **Pronto quando:** teste de ponta a ponta de fixture até o banco. *Depende de:* F2-03, F2-04, F1-21, F1-22.
+- **F2-09** — Salvaguarda de dedup entre fontes. Mesmo `numero_processo` + mesma data (julgamento; na falta, publicação/disponibilização) em outra fonte → `duplicado` com `duplicata_de`, prioridade para a API do tribunal. **Pronto quando:** teste com acórdão sintético presente nas duas fontes. *Depende de:* F2-08, F1-25.
+- **F2-10** — CLI e agendamento do TJDFT. `buscajus ingest tjdft --de … --ate …`; inclusão no agendador diário (dia mais recente + reconsulta do anterior + recoleta de 30 dias). **Pronto quando:** comando documentado e tarefa agendada. *Depende de:* F2-05, F1-30.
+- **F2-11** — Carga inicial de 90 dias do TJDFT. Executar e registrar volumes (incluindo quantos foram descartados por segredo e as substituições do NER). **Pronto quando:** relatório em `docs/`. *Depende de:* F2-10, F2-12.
+- **F2-12** — Anonimização no TJDFT. Aplicar o mascaramento de CPF (F1-39) e o NER de pessoas (F1-37) à ementa e ao dispositivo antes do armazenamento bruto. **Pronto quando:** teste com fixture contendo nome e CPF fictícios no texto. *Depende de:* F1-37, F1-39, F2-06.
+
+---
+
+## Fase 3 — Embeddings e indexação
+
+- **F3-01** — Conjunto de avaliação (primeira versão). ~50 consultas em linguagem natural, cobrindo áreas variadas, incluindo "disputa por herança familiar"; formato versionado (`backend/eval/consultas.yaml`). **Pronto quando:** consultas revisadas por pessoa com formação jurídica.
+- **F3-02** — Abstração de modelo de embedding. Interface `Embedder` (`embed_consultas`, `embed_passagens`, `dimensao`, `nome`), prefixos por modelo, normalização L2, lotes, CPU/GPU automático. **Pronto quando:** testes com modelo pequeno. *Depende de:* F0-02.
+- **F3-03** — Fatiamento de ementas longas. Janelas de ~450 tokens com sobreposição de ~50, usando o tokenizador do modelo. **Pronto quando:** testes com ementa curta (1 trecho) e longa (N trechos). *Depende de:* F3-02.
+- **F3-04** — Ferramenta de avaliação. Gera o *pool* top-20 por sistema, exporta para julgamento (planilha/CSV), importa os julgamentos e calcula nDCG@10, Recall@50, MRR e latência. **Pronto quando:** `buscajus eval` roda contra um índice temporário. *Depende de:* F3-01, F3-02.
+- **F3-05** — Comparação de modelos. Rodar e5-small, e5-base, e5-large, bge-m3 e ao menos um modelo jurídico em português sobre uma amostra da base; medir qualidade (híbrida e só vetorial), latência e throughput em CPU. **Pronto quando:** relatório em `docs/avaliacao-embeddings.md` com recomendação. *Depende de:* F3-04, F1-29, F2-11.
+- **F3-06** — Fixar o modelo. Registrar nome e *revision* na configuração; atualizar o ARCHITECTURE.md (seção 7.1 e dimensão). **Pronto quando:** decisão revisada e aprovada. *Depende de:* F3-05.
+- **F3-07** — Migração de `acordao_trecho`. Com a dimensão do modelo escolhido; FK com `ON DELETE CASCADE`. **Pronto quando:** migração aplicada. *Depende de:* F3-06, F1-04.
+- **F3-08** — Job assíncrono de embeddings. Laço no `worker` com lotes `FOR UPDATE SKIP LOCKED`, só acórdãos `ativo` sem trechos do modelo corrente; idempotente; métricas de throughput. **Pronto quando:** teste de integração gera trechos para os pendentes e ignora os não ativos. *Depende de:* F3-03, F3-07.
+- **F3-09** — Remoção de trechos em mudança de situação. Cancelado, removido, quarentena, duplicado ou nova versão → trechos apagados na mesma transação do upsert. **Pronto quando:** testes para cada transição. *Depende de:* F3-07, F1-25.
+- **F3-10** — Índice HNSW. Criado após a carga inicial, `vector_cosine_ops`, `m=16`, `ef_construction=64`, com `maintenance_work_mem` ajustado. **Pronto quando:** `EXPLAIN` mostra uso do índice na consulta vetorial. *Depende de:* F3-08.
+- **F3-11** — Verificação do índice full-text. Confirmar GIN parcial em `busca_tsv`, pesos A/B/C e `pt_unaccent`. **Pronto quando:** `EXPLAIN` mostra uso do índice; teste de "heranca" casando com "herança". *Depende de:* F1-04.
+- **F3-12** — Pesos do modelo no build/volume. Download na construção da imagem ou no primeiro start para o volume `models`; nenhum download em tempo de consulta. **Pronto quando:** a `api` sobe offline com o volume populado. *Depende de:* F3-06, F0-06.
+- **F3-13** — Indexação da carga inicial. Gerar embeddings de TJPR + TJDFT (90 dias) e medir o tempo total. **Pronto quando:** 100% dos acórdãos ativos com trechos; tempo registrado. *Depende de:* F3-08, F3-10.
+
+---
+
+## Fase 4 — API de busca
+
+- **F4-01** — Contrato da API. Schemas Pydantic de resultado (incluindo `link_oficial` e `link_tribunal`), detalhe, filtros e remoção; OpenAPI publicado. **Pronto quando:** `/docs` mostra o contrato e o frontend consegue gerar tipos. *Depende de:* F0-06.
+- **F4-02** — Detecção de número de processo na consulta. Regex com/sem máscara, 20 dígitos, número parcial; separa o número do texto restante. **Pronto quando:** testes com consultas só-número, número + texto e prefixo. *Depende de:* F1-21.
+- **F4-03** — Busca exata por número. `GET /processos/{numero}` e desvio automático em `/busca`; ordenação por data; prefixo limitado. **Pronto quando:** testes de integração. *Depende de:* F4-02, F1-04.
+- **F4-04** — Ramo full-text. `tsquery` com OR entre lexemas (respeitando aspas e exclusão), `ts_rank_cd`, top 100, `ts_headline`. **Pronto quando:** testes de integração com dados sintéticos. *Depende de:* F3-11.
+- **F4-05** — Ramo vetorial. Embedding da consulta (modelo carregado na inicialização), top-k sobre trechos com HNSW e `iterative_scan`, agrupamento por acórdão. **Pronto quando:** testes de integração; `EXPLAIN` usa o índice com filtros. *Depende de:* F3-10, F3-02.
+- **F4-06** — Fusão RRF. `k` e pesos configuráveis; até 200 resultados; paginação por recorte. **Pronto quando:** testes unitários da fusão (empates, documento em um só ramo). *Depende de:* F4-04, F4-05.
+- **F4-07** — Filtros. Tribunal, órgão, classe, relator (`relator_chave`), período sobre `data_referencia`, aplicados aos dois ramos. **Pronto quando:** testes por filtro e combinados. *Depende de:* F4-06.
+- **F4-08** — Endpoint `/busca`. Integra detecção de número, busca híbrida, filtros, paginação, trecho destacado, citação e aviso. **Pronto quando:** testes de integração do endpoint. *Depende de:* F4-03, F4-07, F4-10.
+- **F4-09** — Endpoint de detalhe `/acordaos/{id}`. 410 com aviso para cancelado/removido; 404 para inexistente/quarentena. **Pronto quando:** testes por situação. *Depende de:* F4-01.
+- **F4-10** — Geração da citação. Regra da seção 9: `j.` com a data de julgamento quando houver; DJEN com `DJEN de` + data de disponibilização (sem calcular publicação); TJDFT com `publ.`; omissão de partes ausentes. **Pronto quando:** testes com os três exemplos do ARCHITECTURE.md e com campos faltantes. *Depende de:* F1-23, F2-08.
+- **F4-11** — Endpoints de filtros e relatores. `/filtros` (com cache) e `/relatores?prefixo=` (trigrama). **Pronto quando:** testes de integração. *Depende de:* F4-01.
+- **F4-12** — Endpoint de remoção. `POST /remocao` grava `pedido_remocao` com validação e limite de taxa; comando administrativo para aceitar (cria `bloqueio`, marca `removido`, apaga trechos) ou rejeitar. **Pronto quando:** testes do fluxo completo. *Depende de:* F1-05, F3-09.
+- **F4-13** — Rate limit por IP na API. Limites distintos para busca e remoção. **Pronto quando:** teste retorna 429 acima do limite. *Depende de:* F4-08.
+- **F4-14** — Cache de embeddings de consulta. LRU em memória. **Pronto quando:** consulta repetida não recalcula o embedding (teste). *Depende de:* F4-05.
+- **F4-15** — Reordenação por cross-encoder (opcional, atrás de flag). Modelo local sobre o top 50. **Pronto quando:** flag desligada por padrão; o ganho medido em F6-07 decide se liga. *Depende de:* F4-06.
+
+---
+
+## Fase 5 — Frontend
+
+- **F5-01** — Cliente tipado da API. Tipos gerados a partir do OpenAPI; URL base por ambiente. **Pronto quando:** o build falha se o contrato mudar sem regenerar. *Depende de:* F4-01, F0-04.
+- **F5-02** — Layout base. Cabeçalho, rodapé com links para `/sobre`, `/privacidade` e `/remocao`; tema acessível; responsivo. **Pronto quando:** páginas vazias navegáveis. *Depende de:* F0-04.
+- **F5-03** — Página de busca. Campo principal em destaque, exemplos de consulta, estado na URL (`/busca?q=…`). **Pronto quando:** buscar atualiza a URL e a lista. *Depende de:* F5-01, F5-02.
+- **F5-04** — Cartão de resultado. Número do processo em destaque, tribunal, órgão, classe, relator, datas, trecho destacado, link "Ver na fonte oficial" (certidão do DJEN ou documento do TJDFT), link secundário "Ver no sistema do tribunal" quando houver, e aviso de reprodução. **Pronto quando:** componente com testes de renderização. *Depende de:* F5-01.
+- **F5-05** — Botão "Copiar citação". Copia exatamente o campo `citacao` da API; feedback visual; acessível por teclado. **Pronto quando:** teste do componente. *Depende de:* F5-04.
+- **F5-06** — Filtros na busca. Tribunal, órgão, classe, relator (autocomplete), período; sincronizados com a URL. **Pronto quando:** os filtros refletem na consulta e na URL. *Depende de:* F5-03, F4-11.
+- **F5-07** — Paginação e estados. Carregando, vazio (com sugestões), erro, limite de resultados. **Pronto quando:** estados cobertos por testes. *Depende de:* F5-03.
+- **F5-08** — Página de detalhe `/acordao/[id]` (SSR). Ementa completa, dispositivo (TJDFT), metadados, citação, links oficiais, aviso de reprodução, link "Solicitar remoção"; tratamento de 410/404. **Pronto quando:** a página renderiza no servidor e trata os estados. *Depende de:* F4-09, F5-05.
+- **F5-09** — Página de processo `/processo/[numero]`. Lista de acórdãos do processo. **Pronto quando:** o link direto por número funciona com e sem máscara. *Depende de:* F4-03.
+- **F5-10** — Páginas institucionais. `/sobre` (fontes, cobertura por tribunal e período) e `/privacidade` (dados tratados, base legal, canal de remoção). **Pronto quando:** conteúdo revisado. *Depende de:* F5-02.
+- **F5-11** — Página `/remocao`. Formulário (número/link, motivo, e-mail) tratado via script, e-mail de contato exibido como texto, mensagem de confirmação. **Pronto quando:** o pedido chega em `pedido_remocao`. *Depende de:* F4-12, F5-02.
+- **F5-12** — Acessibilidade e metadados. WCAG AA (contraste, foco, rótulos), `<title>`/meta por página, sem rastreadores de terceiros. **Pronto quando:** checagem automatizada (axe) sem violações graves. *Depende de:* F5-08.
+
+---
+
+## Fase 6 — Qualidade e testes
+
+- **F6-01** — Testes de contrato dos conectores com respostas gravadas. DJEN (caderno sintético: hash divergente, nova versão, dia sem caderno, 429, comunicações malformadas, checagem pontual) e TJDFT (paginação de 40 em 40, última página parcial, páginas vazias, registro na virada do dia em UTC), sem rede, no CI. **Pronto quando:** cobertura dos conectores ≥ 90%. *Depende de:* F1-16, F1-17, F2-05.
+- **F6-02** — Teste de integração do pipeline. Caderno sintético / fixture TJDFT → banco → embeddings (modelo pequeno) → busca, num Postgres efêmero. **Pronto quando:** roda no CI em < 5 min. *Depende de:* F3-08, F4-08.
+- **F6-03** — Verificação de ausência de dados pessoais. Com o caderno sintético de nomes marcadores: **nenhum destinatário classificado como PF ou ambíguo sobra no texto gravado** (banco e bruto, comparação normalizada, incluindo nomes parciais e MEI sem o sufixo); nenhum CPF sem máscara; nenhum marcador de comunicações descartadas em tabela, arquivo bruto ou log; nomes de PJ, entes públicos, do relator e de magistrados citados preservados; casos difíceis de F1-34 com a classe esperada; área temporária vazia após sucesso e após falha; teste de esquema sem colunas proibidas. **Pronto quando:** testes no CI, bloqueando o merge se falharem. *Depende de:* F1-38, F1-15, F6-02.
+- **F6-04** — Verificação de segredo de justiça. Registro com `segredoJustica: true` (ou valor inesperado) não aparece em nenhuma tabela, arquivo bruto ou resultado de busca. **Pronto quando:** teste no CI. *Depende de:* F2-06, F6-02.
+- **F6-05** — Testes da busca. Número exato, número com máscara, número parcial, filtros, consulta vazia, consulta muito longa, caracteres especiais; cancelados e removidos nunca retornados. **Pronto quando:** testes de integração no CI. *Depende de:* F4-08.
+- **F6-06** — Testes de regressão do parser DJEN. Toda falha de parser observada em produção vira fixture (só com campos da lista branca) + teste. **Pronto quando:** processo documentado e primeiros casos adicionados. *Depende de:* F1-29.
+- **F6-07** — Avaliação da busca semântica. Rodar o conjunto de F3-01 na base real: híbrida × só vetorial × só full-text; ajustar `k`, pesos do RRF e `ef_search`; decidir sobre o cross-encoder (F4-15). Caso obrigatório: "disputa por herança familiar" deve trazer acórdãos de inventário, partilha e sucessão no top 10. **Pronto quando:** relatório em `docs/avaliacao-busca.md` e parâmetros fixados. *Depende de:* F3-13, F4-08.
+- **F6-08** — Teste de carga leve. Latência p95 da busca com a base de 90 dias em hardware equivalente ao de produção. **Pronto quando:** p95 < 500 ms (sem cross-encoder) ou plano de ação registrado. *Depende de:* F4-08.
+- **F6-09** — Testes do frontend. Componentes principais e um fluxo E2E (buscar → copiar citação → abrir detalhe → link oficial) contra API *mock*. **Pronto quando:** roda no CI. *Depende de:* F5-08.
+- **F6-10** — Revisão de quarentena. Comando para listar, revisar e liberar/mascarar acórdãos em quarentena, com registro da decisão; medir a taxa de falso positivo da heurística. **Pronto quando:** a fila da carga inicial foi revisada. *Depende de:* F1-24, F1-29.
+- **F6-11** — Backup e restauração. Script de `pg_dump` diário (sem a área temporária) e teste de restauração documentado. **Pronto quando:** restauração testada uma vez. *Depende de:* F0-05.
+
+---
+
+## Fase 7 — Preparação para expansão
+
+Sem implementar novas fontes ou tribunais; apenas deixar os pontos de extensão prontos e documentados.
+
+- **F7-01** — Tribunais do DJEN por configuração. Garantir que adicionar um TJ ao DJEN seja só incluir a sigla na configuração (com taxa, horário do caderno, data de início das ementas e valores de `tipoDocumento` aceitos por tribunal). **Pronto quando:** teste com um segundo tribunal fictício só por configuração, sem código novo. *Depende de:* F1-30.
+- **F7-02** — Perfis de parser por tribunal. Ponto de extensão para variações de HTML do `texto` entre tribunais (rótulos de cabeçalho, estrutura), com o perfil do TJPR como padrão. **Pronto quando:** interface documentada e perfil TJPR migrado para ela. *Depende de:* F1-20.
+- **F7-03** — Guia "Como adicionar uma nova fonte". Documento em `docs/` explicando o protocolo `Conector`, as regras obrigatórias (rate limit, 429, retomada, anonimização antes de gravar, bruto filtrado sem PII, descarte de arquivos temporários, segredo, lista branca de campos, apenas fontes oficiais) e o checklist de testes. **Pronto quando:** guia revisado. *Depende de:* F2-10.
+- **F7-04** — Registro de fontes. Enum/tabela de fontes extensível sem migração destrutiva; metadados de cobertura (tribunal, período) alimentando `/sobre` automaticamente. **Pronto quando:** `/sobre` lê a cobertura do banco. *Depende de:* F5-10.
+- **F7-05** — Política de prioridade na dedup entre fontes. Tornar configurável a ordem de prioridade por tribunal (API própria > DJEN), para quando houver sobreposição. **Pronto quando:** configuração e testes. *Depende de:* F2-09.
+- **F7-06** — Plano de carga histórica do TJDFT. Base `acordaos` com ~1,76 mi registros (incluindo 258 mil de turmas recursais, subbase `acordaos-tr`; ~1,63 mi sem os de segredo), ≈ 44 mil requisições de 40 registros, dia a dia, do mais recente ao mais antigo, em horário de baixa carga. Estimar tempo, armazenamento (vetores e HNSW nessa escala) e custo de embeddings em CPU × GPU. **Pronto quando:** plano em `docs/` (a execução fica para depois do MVP). *Depende de:* F2-11.
+- **F7-08** — Reavaliar o segredo de justiça do TJDFT. Com o NER validado (F1-36/F1-37), avaliar se os 128.815 acórdãos sob segredo (7,3%), cuja ementa a API devolve completa, podem ser incluídos com anonimização. Só decisão e plano; a inclusão não faz parte do MVP. **Pronto quando:** decisão registrada na questão 14.3 do ARCHITECTURE.md. *Depende de:* F1-37, F2-11.
+- **F7-07** — Notas de escala. Medir o crescimento real da base no MVP e atualizar a seção 12.3 do ARCHITECTURE.md (particionamento, `halfvec`, réplica, tmpfs para cadernos de tribunais maiores). **Pronto quando:** seção atualizada com números medidos. *Depende de:* F6-08.

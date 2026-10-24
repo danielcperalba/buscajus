@@ -1,0 +1,22 @@
+# Dados coletados, brutos filtrados, cadernos temporários e pesos de modelos
+/data/
+
+# Conjunto de avaliação do NER: só em ambiente local restrito, nunca no repositório
+# (ARCHITECTURE.md, seção 6.3)
+ner-avaliacao-privado/
+
+# Configuração local
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Editores e SO
+.DS_Store
+.idea/
+.vscode/
