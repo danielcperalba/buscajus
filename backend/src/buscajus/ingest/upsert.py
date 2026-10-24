@@ -9,13 +9,20 @@ Para cada acórdão normalizado:
 4. Hash diferente → a versão atual vai para ``acordao_historico`` e ``versao += 1``.
 5. Situação: ``cancelado`` se a fonte indicar (F1-26), ``quarentena`` se o estado da fonte for
    anômalo (falha fechada: não indexa sem tratar como cancelamento) ou houver PII residual,
+   ``duplicado`` se outra fonte de maior prioridade já tiver o mesmo acórdão ativo (F2-09),
    senão ``ativo``. ``removido`` e ``duplicado`` existentes não são desfeitos pela recoleta.
+6. Dedup entre fontes (F2-09; ARCHITECTURE.md, seção 3.5): mesmo ``numero_processo`` e mesma
+   data de referência (julgamento; na falta, publicação ou disponibilização) em outra fonte.
+   Prioridade: API do próprio tribunal > DJEN. O de menor prioridade fica ``duplicado``, com
+   ``duplicata_de`` apontando para o outro, seja ele o novo ou o que já estava no banco. Só um
+   acórdão ``ativo`` faz o outro virar duplicado.
 
 Os trechos vetoriais (``acordao_trecho``, Fase 3) serão apagados aqui sempre que a situação
 deixar de ser ``ativo`` ou o conteúdo mudar (F3-09).
 """
 
 from collections.abc import Sequence
+from datetime import date
 from enum import StrEnum
 
 from sqlalchemy import Connection, text
@@ -24,6 +31,10 @@ from buscajus.ingest.modelos import AcordaoNormalizado
 
 # Situações definidas fora da coleta, que a recoleta não desfaz.
 SITUACOES_PERSISTENTES = ("removido", "duplicado")
+
+# Dedup entre fontes (F2-09): menor número, maior prioridade. A API do tribunal vence o DJEN.
+PRIORIDADE_FONTE = {"tjdft": 0, "djen": 1}
+MOTIVO_DUPLICADO = "mesmo processo e data em fonte de maior prioridade"
 
 _COLUNAS_CONTEUDO = (
     "identificador_fonte",
@@ -56,13 +67,14 @@ _COLUNAS_CONTEUDO = (
     "anonimizacao_substituicoes",
     "hash_conteudo",
 )
-# Os três primeiros vêm da fonte; situação e motivo são calculados.
+# Os três primeiros vêm da fonte; situação, motivo e duplicata são calculados.
 _COLUNAS_ESTADO = (
     "ativo_fonte",
     "status_fonte",
     "data_cancelamento",
     "situacao",
     "motivo_situacao",
+    "duplicata_de",
 )
 
 
@@ -86,6 +98,65 @@ def situacao_coletada(
     if motivos_pii:
         return "quarentena", "PII residual: " + ", ".join(motivos_pii)
     return "ativo", None
+
+
+def _fontes(acordao: AcordaoNormalizado, *, superiores: bool) -> list[str]:
+    propria = PRIORIDADE_FONTE[acordao.fonte]
+    return [
+        fonte
+        for fonte, prioridade in PRIORIDADE_FONTE.items()
+        if (prioridade < propria if superiores else prioridade > propria)
+    ]
+
+
+def _data_referencia(acordao: AcordaoNormalizado) -> date | None:
+    return acordao.data_julgamento or acordao.data_publicacao or acordao.data_disponibilizacao
+
+
+def duplicata_superior(conexao: Connection, acordao: AcordaoNormalizado) -> int | None:
+    """Id do acórdão ativo de fonte com maior prioridade que é o mesmo deste, se houver."""
+    fontes = _fontes(acordao, superiores=True)
+    data = _data_referencia(acordao)
+    if not fontes or data is None:
+        return None
+    id_superior: int | None = conexao.scalar(
+        text("""
+            SELECT id FROM acordao
+            WHERE numero_processo = :numero AND data_referencia = :data
+              AND fonte::text = ANY(:fontes) AND situacao = 'ativo'
+            ORDER BY id LIMIT 1
+        """),
+        {"numero": acordao.numero_processo, "data": data, "fontes": fontes},
+    )
+    return id_superior
+
+
+def marcar_duplicatas_inferiores(
+    conexao: Connection, acordao: AcordaoNormalizado, acordao_id: int
+) -> int:
+    """Marca como ``duplicado`` os ativos de menor prioridade que são o mesmo acórdão."""
+    fontes = _fontes(acordao, superiores=False)
+    data = _data_referencia(acordao)
+    if not fontes or data is None:
+        return 0
+    return len(
+        conexao.execute(
+            text("""
+                UPDATE acordao SET situacao = 'duplicado', motivo_situacao = :motivo,
+                    duplicata_de = :id, atualizado_em = now()
+                WHERE numero_processo = :numero AND data_referencia = :data
+                  AND fonte::text = ANY(:fontes) AND situacao = 'ativo'
+                RETURNING id
+            """),
+            {
+                "numero": acordao.numero_processo,
+                "data": data,
+                "fontes": fontes,
+                "id": acordao_id,
+                "motivo": MOTIVO_DUPLICADO,
+            },
+        ).all()
+    )
 
 
 def bloqueado(conexao: Connection, acordao: AcordaoNormalizado) -> bool:
@@ -130,9 +201,13 @@ def upsert(
         return Resultado.BLOQUEADO
 
     situacao, motivo = situacao_coletada(cancelado, motivos_pii, anomalia=anomalia)
+    duplicata_de = duplicata_superior(conexao, acordao) if situacao == "ativo" else None
+    if duplicata_de is not None:
+        situacao, motivo = "duplicado", MOTIVO_DUPLICADO
     valores = acordao.colunas() | {
         "situacao": situacao,
         "motivo_situacao": motivo,
+        "duplicata_de": duplicata_de,
         "coleta_bruta_id": coleta_bruta_id,
     }
     atual = conexao.execute(
@@ -156,6 +231,8 @@ def upsert(
             valores,
         ).one_or_none()
         if inserido is not None:
+            if situacao == "ativo":
+                marcar_duplicatas_inferiores(conexao, acordao, inserido.id)
             return Resultado.INSERIDO
         # Outra transação inseriu no meio do caminho: segue como atualização.
         return upsert(
@@ -191,6 +268,8 @@ def upsert(
         """),  # noqa: S608 (interpola só nomes de colunas fixos)
         valores | {"id": atual.id},
     )
+    if situacao == "ativo" and atual.situacao not in SITUACOES_PERSISTENTES:
+        marcar_duplicatas_inferiores(conexao, acordao, atual.id)
     return Resultado.NOVA_VERSAO if mudou else Resultado.ESTADO_ATUALIZADO
 
 
