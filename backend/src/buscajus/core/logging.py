@@ -3,6 +3,9 @@
 Política (ARCHITECTURE.md, seção 6.2): nunca registrar o conteúdo de comunicações,
 ementas, nomes de destinatários, URLs temporárias nem termos de busca completos.
 Registre identificadores e contagens, passando-os em ``extra``.
+
+Os logs vão para a saída de erro; a saída padrão fica livre para o resultado dos comandos
+(o resumo JSON da CLI pode ser lido por outro programa).
 """
 
 import json
@@ -32,7 +35,7 @@ class FormatadorJson(logging.Formatter):
 
 
 def configurar_logging(nivel: str = "INFO") -> None:
-    manipulador = logging.StreamHandler(sys.stdout)
+    manipulador = logging.StreamHandler(sys.stderr)
     manipulador.setFormatter(FormatadorJson())
     raiz = logging.getLogger()
     raiz.handlers[:] = [manipulador]

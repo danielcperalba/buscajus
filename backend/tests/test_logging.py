@@ -10,7 +10,9 @@ def test_emite_uma_linha_json_com_campos_extras(capsys: pytest.CaptureFixture[st
     configurar_logging("INFO")
     logging.getLogger("buscajus.teste").info("caderno processado", extra={"acordaos_aceitos": 3})
 
-    evento = json.loads(capsys.readouterr().out.strip())
+    saida = capsys.readouterr()
+    assert saida.out == ""  # logs só na saída de erro
+    evento = json.loads(saida.err.strip())
     assert evento["msg"] == "caderno processado"
     assert evento["nivel"] == "INFO"
     assert evento["logger"] == "buscajus.teste"
