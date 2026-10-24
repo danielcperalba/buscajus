@@ -32,6 +32,7 @@ COLUNAS_JANELAS = (
     ("itens_recebidos", "RECEBIDOS"),
     ("itens_aceitos", "ACEITOS"),
     ("itens_descartados", "DESCARTADOS"),
+    ("descartados_segredo", "SEGREDO"),
     ("rejeitados", "REJ. ANONIM."),
     ("quarentena", "QUARENTENA"),
     ("cancelados", "CANCELADOS"),
@@ -48,6 +49,7 @@ _SOMAVEIS = {
     "itens_recebidos",
     "itens_aceitos",
     "itens_descartados",
+    "descartados_segredo",
     "rejeitados",
     "quarentena",
     "cancelados",
@@ -110,7 +112,7 @@ def listar_janelas(
     linhas = conexao.execute(
         text(f"""
             SELECT fonte::text AS fonte, tribunal, data_inicio, data_fim, status, ultima_pagina,
-                itens_recebidos, itens_aceitos, itens_descartados,
+                itens_recebidos, itens_aceitos, itens_descartados, descartados_segredo,
                 cardinality(rejeitados_anonimizacao) AS rejeitados, quarentena, cancelados,
                 anomalias, falhas_parser, respostas_429, tentativas, ultimo_erro
             FROM coleta_janela WHERE {onde}

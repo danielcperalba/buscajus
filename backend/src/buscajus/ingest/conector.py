@@ -52,6 +52,8 @@ class Contadores:
     recebidos: int = 0
     aceitos: int = 0
     descartados: int = 0
+    # Dos descartados, os que vieram sob segredo de justiça (TJDFT). Só a contagem é gravada.
+    segredo: int = 0
     # Ids das comunicações recusadas pela falha segura da anonimização (nunca o conteúdo).
     rejeitados_anonimizacao: list[str] = field(default_factory=list)
     falhas_parser: int = 0
@@ -65,6 +67,7 @@ class Contadores:
         self.recebidos += outro.recebidos
         self.aceitos += outro.aceitos
         self.descartados += outro.descartados
+        self.segredo += outro.segredo
         self.rejeitados_anonimizacao.extend(outro.rejeitados_anonimizacao)
         self.falhas_parser += outro.falhas_parser
         self.quarentena += outro.quarentena
@@ -90,6 +93,10 @@ class LoteBruto:
     pagina: int | None = None
     total_fonte: int | None = None
     caderno: MetadadosCaderno | None = None
+    # TJDFT: uuids dos registros descartados por segredo de justiça, só em memória, para
+    # retirar da busca os que já estavam indexados (segredo superveniente, F2-07). Nunca são
+    # gravados no bruto nem na unidade de coleta.
+    ids_segredo: list[str] = field(default_factory=list)
 
 
 class UnidadeSemDados(Exception):
