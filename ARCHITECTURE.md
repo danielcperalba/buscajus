@@ -385,14 +385,16 @@ CREATE INDEX acordao_trecho_hnsw ON acordao_trecho
 
 | Tabela | Conteúdo |
 |---|---|
-| `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao`, `falhas_parser`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `processado_em`. Único em `(tribunal, data)`. |
-| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `tentativas`, `ultimo_erro`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
+| `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao` (lista dos `id` das comunicações recusadas pela falha segura, nunca o conteúdo), `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `iniciado_em`, `processado_em`. Único em `(tribunal, data)`. |
+| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
 | `coleta_bruta` | Metadados de cada arquivo bruto **filtrado**: origem (`caderno_djen_id` ou `coleta_janela_id` + `pagina`), `caminho_arquivo`, `sha256`, `bytes`, `itens`, `recebida_em`, `versao_parser`. Arquivos em `data/raw/{fonte}/{tribunal}/…` (volume Docker). |
 | `acordao_historico` | Versões anteriores de um acórdão quando `hash_conteudo` muda: `acordao_id`, `versao`, `snapshot` (jsonb dos campos normalizados), `substituido_em`. |
 | `classe_cnj` | `codigo`, `nome`, `codigo_pai`, carregada da TPU/CNJ. |
-| `bloqueio` | Conteúdo removido a pedido ou por decisão interna: `fonte`, `id_fonte` **ou** `numero_processo`, `motivo`, `criado_em`. Consultado no upsert para impedir reinserção na recoleta. |
-| `pedido_remocao` | Canal de remoção: `acordao_id`/`numero_processo`, `motivo`, `contato` (e-mail do solicitante), `status`, `criado_em`, `resolvido_em`. |
-| `tarefa` | Fila simples em Postgres (`tipo`, `payload`, `status`, `agendada_para`, `tentativas`), consumida com `FOR UPDATE SKIP LOCKED`. |
+| `bloqueio` | Conteúdo removido a pedido ou por decisão interna: `fonte`, `id_fonte` **ou** `numero_processo`, `motivo`, `pedido_remocao_id`, `criado_em`. Consultado no upsert para impedir reinserção na recoleta. |
+| `pedido_remocao` | Canal de remoção: `acordao_id`/`numero_processo`, `motivo`, `contato` (e-mail do solicitante, apagado após a retenção), `status` (`pendente`, `aceito`, `rejeitado`), `decisao`, `criado_em`, `resolvido_em`. |
+| `tarefa` | Fila simples em Postgres (`tipo`, `payload`, `status`, `agendada_para`, `tentativas`, `ultimo_erro`), consumida com `FOR UPDATE SKIP LOCKED`. |
+
+Erros gravados em `ultimo_erro` e nos logs nunca trazem conteúdo da fonte: só as exceções do próprio código (`ErroSeguro`), com mensagens controladas, têm a mensagem registrada; das demais ficam o tipo e o local de origem (exceções do SQLAlchemy, por exemplo, incluem os parâmetros da consulta na mensagem).
 
 ### 4.5 Regras de upsert e versionamento
 
