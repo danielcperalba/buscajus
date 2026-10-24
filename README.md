@@ -52,8 +52,13 @@ Os testes marcados com `banco` precisam de um Postgres com pgvector e de um banc
 ```bash
 docker compose up -d db
 docker compose exec db psql -U buscajus -c "CREATE DATABASE buscajus_teste"
-BUSCAJUS_TEST_DATABASE_URL=postgresql+psycopg://buscajus:buscajus@localhost:5432/buscajus_teste uv run pytest
+BUSCAJUS_TEST_DATABASE_URL=postgresql+psycopg://buscajus:buscajus@127.0.0.1:5432/buscajus_teste uv run pytest
 ```
+
+No Windows (PowerShell), defina a variável antes:
+`$env:BUSCAJUS_TEST_DATABASE_URL='postgresql+psycopg://buscajus:buscajus@127.0.0.1:5432/buscajus_teste'`.
+Use `127.0.0.1`, não `localhost`: no Windows, `localhost` tenta `::1` primeiro e cada conexão
+perde ~2 s, o que faz a suíte parecer travada.
 
 Migrações fora do compose: `uv run alembic upgrade head` (usa `BUSCAJUS_DATABASE_URL`).
 

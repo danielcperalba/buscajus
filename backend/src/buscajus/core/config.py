@@ -112,7 +112,7 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql+psycopg://buscajus:buscajus@localhost:5432/buscajus"
+    database_url: str = "postgresql+psycopg://buscajus:buscajus@127.0.0.1:5432/buscajus"
     nivel_log: NivelLog = "INFO"
 
     diretorio_raw: Path = Path("data/raw")
