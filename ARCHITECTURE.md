@@ -505,15 +505,17 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
   - **PJ**: nome com marcador de pessoa jurídica ou de ente público. Isso inclui natureza societária (`S.A.`, `S/A`, `LTDA`, `EIRELI`, `SOCIEDADE`, `COOPERATIVA`, `ASSOCIAÇÃO`, `FUNDAÇÃO`, `CONDOMÍNIO`, `MASSA FALIDA`), setor (`BANCO`, `SEGURADORA`, `COMÉRCIO`, `INDÚSTRIA`) e ente público (`MUNICÍPIO DE`, `ESTADO DO`, `UNIÃO`, `INSS`, `MINISTÉRIO PÚBLICO`, `DEFENSORIA`, `AUTARQUIA`, `SECRETARIA` etc.). Uma razão social que contém nome de pessoa (`JOÃO SILVA COMÉRCIO DE MÓVEIS LTDA`) continua PJ.
   - **Empresário individual e MEI contam como PF**: nome de pessoa seguido de `ME`, `MEI`, `EI` ou de um número de 11 dígitos (`FULANO DE TAL ME`, `FULANO DE TAL 12345678900`). O sufixo e o número são removidos antes de procurar o nome no texto. `ESPÓLIO DE` + nome também conta como PF.
   - **Na dúvida, `ambíguo`, tratado como PF** (o nome é substituído).
+- Ordem das regras (`ingest.anonimizacao.classificacao`): CNPJ, natureza societária ou ente público → PJ; depois `ESPÓLIO DE`, sufixo `ME`/`MEI`/`EI` ou 11 dígitos → PF; depois marcadores de setor → PJ. Marcadores que também são sobrenomes (`BANCO`, `IGREJA`, `CAIXA`, `INSTITUTO`, `ESTADO DO`…) só contam no início do nome, porque errar para PJ deixaria um nome de pessoa no texto.
 - Um conjunto fixo de casos difíceis verifica a classificação em teste: MEI, razão social com nome de pessoa, órgãos públicos, espólio, massa falida e condomínio.
 - A substituição usa iniciais com ponto, ignorando partículas (`JOSÉ DA SILVA SANTOS` → `J.S.S.`), como os próprios tribunais costumam fazer.
 - O casamento é tolerante: comparação sem acentos e sem diferença de caixa, feita sobre os nós de texto do HTML (com as entidades já decodificadas) e re-serializada, para o `texto` continuar sendo HTML válido. Casa o nome completo e também subsequências de dois ou mais tokens (ex.: primeiro e último nome). Um token isolado não é substituído nessa camada, para evitar falsos positivos com sobrenomes comuns; esses casos ficam para a camada 2.
-- O nome do relator e os rótulos do cabeçalho não são alterados.
+- O nome do relator e os rótulos do cabeçalho não são alterados: as linhas de metadados do cabeçalho (processo, relator, órgão julgador, data) ficam fora das camadas de nomes, e o nome do relator fica protegido também no corpo (citações). Na substituição, o texto é decodificado (inclusive entidades escapadas duas vezes) e o HTML é re-serializado com os caracteres em Unicode.
 
 **Mascaramento de CPF (DJEN e TJDFT)**
 
 - Qualquer CPF no texto é mascarado como `***.***.***-**`, pertença ou não a um destinatário.
 - O padrão formatado (`000.000.000-00`) é **sempre** mascarado.
+- Grafias parciais (`000000000-00`, `000.000.00000`) são mascaradas se o dígito verificador for válido.
 - Uma sequência de 11 dígitos sem formatação só é mascarada se cumprir duas condições: (a) **não estar colada a outros dígitos**, isto é, sem dígito imediatamente antes ou depois; (b) ter dígitos verificadores válidos. A condição (a) evita casar pedaços de um número de processo sem máscara (20 dígitos) ou de um CNPJ (14 dígitos).
 
 **Camada 2: NER de pessoas (DJEN e TJDFT)**
@@ -523,6 +525,7 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 - Exceções, mantidas no texto: o relator do acórdão; nomes precedidos de títulos de magistrado em citações de precedentes (`Rel.`, `Min.`, `Des.`, `Juiz`); epônimos de leis e institutos de uma lista curada (`Lei Maria da Penha` etc.).
 - O limiar favorece o recall: na dúvida, substitui. Um nome trocado por engano por iniciais custa pouca legibilidade; um nome que escapa é um vazamento.
 - O custo é baixo, porque a camada roda só nas ~1.500 ementas aceitas por dia, não nas ~92 mil comunicações.
+- O modelo entra pela interface `DetectorPessoas` (`ingest.anonimizacao.camada2`), aplicada a cada nó de texto do HTML. **Sem modelo configurado, o pipeline não é criado** (`criar_anonimizador` falha antes de qualquer download): nada real é processado sem a camada 2.
 
 **Conjunto de avaliação do NER** (aprovado com condições)
 
@@ -535,6 +538,7 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 **Invariante e falha segura**
 
 - Depois das camadas, o pipeline verifica que nenhum nome de destinatário classificado como PF ou ambíguo sobrou no texto (comparação normalizada, nome completo ou subsequência de 2+ tokens) e que não há CPF sem máscara.
+- A verificação cobre o texto inteiro, inclusive as linhas protegidas do cabeçalho (só o relator e os epônimos ficam de fora), cada nó de texto e o texto corrido, para pegar nomes partidos entre tags (`<b>JOÃO</b> SILVA`).
 - Se sobrou algum, o item **não é gravado**, nem no bruto. Fica registrado só o `id` da comunicação, em `rejeitados_anonimizacao` do caderno, para investigar, corrigir e reprocessar o caderno.
 - Só depois disso a lista branca descarta `destinatarios` e `destinatarioadvogados`.
 - Cada acórdão registra `anonimizacao_versao` e o número de substituições, nunca os nomes.
