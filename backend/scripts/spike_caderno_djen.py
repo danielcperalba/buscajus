@@ -416,6 +416,8 @@ def analisar(cliente: httpx.Client, sigla: str, data: str, agregados: Agregados)
 
 
 def main() -> int:
+    # No Windows a saída padrão é cp1252; os rótulos e mensagens têm acentos.
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tribunal", default="TJPR")
     parser.add_argument("datas", nargs="+", help="AAAA-MM-DD")

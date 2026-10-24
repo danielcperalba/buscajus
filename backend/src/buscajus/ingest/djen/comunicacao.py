@@ -3,16 +3,20 @@
 Só para conferir o estado de uma comunicação específica: a que sumiu numa nova versão do
 caderno ou a de um pedido de remoção. **Nunca** para coleta em massa. Da resposta só se
 leem ``ativo``, ``status`` e ``data_cancelamento``; ela não é gravada nem logada.
+
+Filtros (confirmados no F1-01): ``numeroProcesso`` (20 dígitos) + ``siglaTribunal`` +
+``dataDisponibilizacaoInicio`` = ``dataDisponibilizacaoFim`` = data do caderno devolvem um
+resultado, conferido pelo ``id``. ``numeroComunicacao`` não serve: não é único. O endpoint
+tem janela de ~20 requisições (``x-ratelimit-remaining``); o cliente pausa ao chegar a zero.
 """
 
-from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date
 
 import httpx
 
 from buscajus.ingest.conector import ErroColeta
-from buscajus.ingest.djen.campos import comunicacao_cancelada
+from buscajus.ingest.djen.campos import EstadoFonte, RegraEstado
 from buscajus.ingest.http import ClienteHttp
 
 
@@ -23,17 +27,16 @@ class EstadoComunicacao:
     status: str | None = None
     data_cancelamento: str | None = None
 
-    def cancelada(self, status_cancelamento: Collection[str]) -> bool:
-        """Não encontrada também conta como cancelada (ARCHITECTURE.md, seção 3.2)."""
+    def estado(self, regra: RegraEstado) -> EstadoFonte:
+        """Não encontrada conta como cancelada (ARCHITECTURE.md, seção 3.2)."""
         if not self.encontrada:
-            return True
-        return comunicacao_cancelada(
+            return EstadoFonte.CANCELADA
+        return regra.classificar(
             {
                 "ativo": self.ativo,
                 "status": self.status,
                 "data_cancelamento": self.data_cancelamento,
-            },
-            status_cancelamento,
+            }
         )
 
 

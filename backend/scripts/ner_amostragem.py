@@ -82,6 +82,8 @@ def _verificar_ambiente(saida: Path) -> None:
 
 
 def main() -> int:
+    # No Windows a saída padrão é cp1252; os rótulos e mensagens têm acentos.
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("datas", nargs="+", type=date.fromisoformat)
     parser.add_argument("--saida", type=Path, required=True)

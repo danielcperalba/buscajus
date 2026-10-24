@@ -16,6 +16,7 @@ CAMPOS_CONTEUDO = (
     "orgao_julgador",
     "classe_nome",
     "classe_codigo_cnj",
+    "classe_citacao",
     "data_julgamento",
     "data_publicacao",
     "data_disponibilizacao",
@@ -42,6 +43,9 @@ class AcordaoNormalizado:
     id_orgao_fonte: str | None = None
     classe_nome: str | None = None
     classe_codigo_cnj: int | None = None
+    # Classe exibida na citação. DJEN: a do cabeçalho do texto, que difere de nomeClasse em
+    # 44% das ementas do TJPR (F1-01); classe_nome/classe_codigo_cnj servem aos filtros.
+    classe_citacao: str | None = None
     relator: str | None = None
     relator_chave: str | None = None
     turma_recursal: bool | None = None

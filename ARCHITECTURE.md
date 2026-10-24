@@ -10,6 +10,8 @@
 >
 > **Revisão 4 (22/10/2026)**: início das ementas do TJPR no DJEN em 23/07/2025; API do TJDFT validada (curinga, filtros, `tamanho` 40, URL estável, UTC); segredo de justiça do TJDFT segue excluído e vira questão aberta; regra de CPF reforçada; amostra e prazo do NER aprovados. Correção posterior: `acordaos-tr` é subbase (não base) e `segredoJustica` é booleano nos registros.
 >
+> **Revisão 6 (24/10/2026)**: F1-01 executado no Brasil (3 cadernos TJPR, 347.005 comunicações, 5.482 ementas). Campos ausentes nos cadernos recentes (`numeroprocessocommascara`, `meiocompleto`, `idOrgao`), volume real (até 163 MB por caderno; limite de 1 GB e tmpfs de 1,1 GB), classe da citação vinda do cabeçalho (seção 9), regra de estado da comunicação com anomalia em falha fechada, filtros e janela de limite do `/comunicacao`.
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -149,22 +151,24 @@ Todo conector implementa a mesma interface (seção 3.4) e obedece a estas regra
 
 **Sem filtro por tipo de documento no servidor**: o filtro de `tipoDocumento` é feito do nosso lado.
 
-**Caderno: o que já foi validado** (F1-01; os itens ainda abertos estão no fim)
+**Caderno: o que foi validado (F1-01)**
+
+Spike rodado no Brasil com `backend/scripts/spike_caderno_djen.py` (só agregados), sobre os cadernos TJPR de 23/10/2026, 15/10/2026 e 02/03/2026: 347.005 comunicações, 5.482 ementas de acórdão; 01/09/2023 respondeu 404.
 
 - **Acesso**: a API (CloudFront) **bloqueia IPs fora do Brasil** (HTTP 403, "configured to block access from your country"). Coleta e investigação precisam rodar de uma máquina no Brasil; nunca usar proxy para contornar o bloqueio (seção 3.1).
-- **Metadados** (`GET /api/v1/caderno/{sigla}/{data}/D`, ~750 bytes): `versao`, `hash` (SHA-256 do ZIP), `status`, `total_comunicacoes` e `url`. Valores de `status` do caderno (Swagger): `Não Processado`, `Em processamento`, `Processado`, `Sem comunicações`, `Cancelado`. Só `Processado` é baixado; `Não Processado` e `Em processamento` são tentados de novo mais tarde; `Sem comunicações` equivale a dia sem caderno.
+- **Metadados** (`GET /api/v1/caderno/{sigla}/{data}/D`, ~750 bytes): `versao`, `hash` (SHA-256 do ZIP), `status`, `total_comunicacoes` e `url`. Valores de `status` do caderno (Swagger): `Não Processado`, `Em processamento`, `Processado`, `Sem comunicações`, `Cancelado`. Só `Processado` é baixado; `Não Processado` e `Em processamento` são tentados de novo mais tarde; `Sem comunicações` equivale a dia sem caderno. Esse endpoint **não envia** cabeçalhos `x-ratelimit-*`.
 - **Dia sem caderno**: HTTP 404 (ex.: TJPR 2023-09-01) → `sem_caderno`.
-- **URL temporária**: host `djen-prd.prd.s3.cnj.jus.br`, válida por **5 minutos**. `HEAD` responde 403; `GET` (inclusive com `Range`) funciona. Por isso o download começa logo depois de obter os metadados, e uma nova tentativa pede metadados novos.
+- **URL temporária**: host `djen-prd.prd.s3.cnj.jus.br`, `X-Amz-Expires=300` (**5 minutos**). `HEAD` responde 403; `GET` (inclusive com `Range`) funciona. Por isso o download começa logo depois de obter os metadados, e uma nova tentativa pede metadados novos.
 - **SHA-256**: o hash do ZIP baixado bateu com o campo `hash`.
-- **ZIP**: arquivos `{SIGLA}-D-{AAAA-MM-DD}_{n}.json`, cada um `{"count": ≤ 1000, "items": [...]}`, com itens no mesmo formato de `/api/v1/comunicacao`. A soma dos `items` bateu com `total_comunicacoes` (92.172 no TJPR em 15/10/2026: 57 MB compactado, 302 MB descompactado, 93 arquivos, 1.536 ementas de acórdão, 34 órgãos; em 02/03/2026: 2,7 MB, 766 ementas). Cada arquivo tem poucos MB e é lido inteiro; o caderno nunca é carregado todo em memória.
+- **ZIP**: arquivos `{SIGLA}-D-{AAAA-MM-DD}_{n}.json`, cada um `{"count": ≤ 1000, "items": [...]}`, com itens no mesmo formato de `/api/v1/comunicacao`. A soma dos `items` bateu com `total_comunicacoes`. A leitura é feita **uma entrada por vez** (poucos MB cada); o caderno nunca é descompactado nem carregado inteiro em memória.
+- **Volume**: cresce bastante. 23/10/2026: 250.535 comunicações, ZIP de **163 MB** (887 MB descompactado), 251 entradas, ~3.180 ementas. 15/10/2026: 92.172 comunicações, 57 MB (302 MB descompactado), 93 entradas, 1.536 ementas, 34 órgãos. 02/03/2026: 2,7 MB, 766 ementas. Limite de download: 1 GB (`djen.limite_bytes_caderno`), com alerta no log acima de 500 MB (`djen.alerta_bytes_caderno`).
 - **`tipoDocumento`** pode vir escapado no JSON (`"Ementa de Ac\u00f3rd\u00e3o"`): a comparação é feita depois do *parse*, nunca por regex no texto bruto.
-- **Destinatários** na consulta pública: `destinatarios[]` com `nome`, `polo` e `comunicacao_id`; `destinatarioadvogados[]` com o advogado aninhado em `advogado` (`nome`, `numero_oab`, `uf_oab`). Não há `cpf_cnpj`.
-- **Cabeçalho do `texto`**: tabela com `Processo:`, `Relator(a):`, `Órgão Julgador:` (com entidades: `&Oacute;rg&atilde;o`) e `Data do Julgamento:`, seguida de `Ementa:` numa célula `colspan=2`. Presente em 100% das 1.536 ementas de 15/10/2026. A célula do processo traz a classe colada ao número: `0042094-26.2025.8.16.0014(Recurso Inominado)`; o parser separa número e classe e confere o número com `numeroprocessocommascara`.
-- **Nomes no texto**: em ~4% das ementas (60 de 1.536) o nome de um destinatário PF aparece no texto, sobretudo em processos criminais e embargos.
-
-**Ainda abertos** (script `backend/scripts/spike_caderno_djen.py`, que imprime só agregados e roda no Brasil): valores de `status` e de cancelamento das comunicações (`ativo`, `status`, `data_cancelamento`, `motivo_cancelamento`); tipos de `codigoClasse` e `idOrgao`; variações dos rótulos do cabeçalho em outros dias; HTML exato da célula da ementa. As fixtures sintéticas (`backend/tests/fixtures/djen/`) assumem `status` `"P"` (ativa) e `"C"` (cancelada) até a confirmação.
-
-**Volume de referência (TJPR, caderno de 15/10/2026)**: ~57 MB compactado, ~92 mil comunicações, 1.536 ementas de acórdão (~1,7%). O ZIP é descartado depois do processamento.
+- **Campos**: `numeroprocessocommascara` e `meiocompleto` **não existem** nos cadernos recentes (só no de 02/03/2026); `idOrgao` não vem no caderno; há o campo extra `dataenvio`. O número do processo vem de `numero_processo` (20 dígitos em 100%) e a máscara é gerada por nós (seção 5.2). `link` é nulo em 1.180 comunicações (hosts vistos: `projudi.tjpr.jus.br`, `eproc1g.tjpr.jus.br`, `eproc2g.tjpr.jus.br`) e `texto` é nulo em 3; ementa sem texto vira falha de parser, sem derrubar o caderno.
+- **Destinatários** na consulta pública: `destinatarios[]` com `nome`, `polo` (`A`, `P`, `T`, `D`) e `comunicacao_id`; `destinatarioadvogados[]` com o advogado aninhado em `advogado` (`nome`, `numero_oab`, `uf_oab`). Não há `cpf_cnpj`.
+- **Cabeçalho do `texto`**: tabela de 5 linhas com os rótulos `Processo:`, `Relator(a):`, `Órgão Julgador:` (com entidades: `&Oacute;rg&atilde;o`), `Data do Julgamento:` e `Ementa:` (célula `colspan=2`) em **100%** das ementas; data `dd/mm/aaaa` em 100%; o relator começa com "Desembargador(a)" em 77%. A célula do processo traz a classe colada ao número, no formato `NNNNNNN-DD.AAAA.J.TR.OOOO(classe)` em 100%: o parser separa número e classe e confere o número com `numero_processo`.
+- **Classe**: a classe entre parênteses no cabeçalho é **diferente** de `nomeClasse` em 44% das ementas (iguais, depois de normalizar, em 3.081 de 5.482). A citação usa a do cabeçalho (`classe_citacao`, seção 9); `nomeClasse`/`codigoClasse` ficam em `classe_nome`/`classe_codigo_cnj` para os filtros.
+- **Estado das comunicações**: `status = "P"` e `ativo = true` em 100%; `data_cancelamento` e `motivo_cancelamento` sempre nulos. Nenhum valor de `status` de cancelamento foi observado (`"C"` segue sem confirmação). Regra em "Versões e cancelamentos", abaixo.
+- **Nomes no texto**: o nome completo de um destinatário aparece no texto em 6,9% das ementas (379 de 5.482), sobretudo em processos criminais e embargos.
 
 **Início das ementas no TJPR: 23/07/2025.** Há cadernos disponíveis desde pelo menos 2022, mas o TJPR só publica "Ementa de Acórdão" no DJEN a partir dessa data. Contagens observadas: 0 em 21 e 22/07/2025; 1.342 em 23/07; 1.109 em 24/07; 1.680 em 25/07. A data fica configurada por tribunal (`djen.inicio_ementas.TJPR = 2025-07-23`), e o planejador não agenda cadernos anteriores a ela.
 
@@ -191,15 +195,19 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 - Segundo a documentação, a `versao` sobe quando o diário é reprocessado por cancelamento. Se a `versao` de um caderno mudar, o dia é **reprocessado inteiro**.
 - O job diário processa o caderno novo e **verifica a `versao` dos cadernos dos últimos 30 dias** pelos metadados (~22 KB/dia por tribunal), baixando de novo só os que mudaram.
 - **Risco residual aceito**: em 42 dias úteis do TJPR, todos os cadernos estavam na versão 1, então o aumento de versão por cancelamento ainda não foi observado na prática. Cancelamentos que não mudem a versão, ou que ocorram depois de 30 dias, podem passar despercebidos. Os campos de cancelamento dos itens continuam sendo respeitados sempre que um caderno é processado.
-- Um acórdão presente na versão anterior e ausente na nova é conferido individualmente via `GET /api/v1/comunicacao` (filtros `siglaTribunal`, `numeroProcesso` e a data de disponibilização como início e fim; a comunicação é identificada pelo `id` na resposta). Se estiver cancelado ou não for encontrado, fica `cancelado`.
-- Um item é considerado cancelado se `ativo == false`, ou `data_cancelamento` não for nulo, ou `status` estiver no conjunto de valores de cancelamento documentado no Swagger.
+- Um acórdão presente na versão anterior e ausente na nova é conferido individualmente via `GET /api/v1/comunicacao` com `numeroProcesso` (20 dígitos) + `siglaTribunal` + `dataDisponibilizacaoInicio` = `dataDisponibilizacaoFim` = data do caderno, o que devolve um resultado, conferido pelo `id`. `numeroComunicacao` **não** serve: não é único (1.861 resultados com `siglaTribunal`). Esse endpoint tem janela de ~20 requisições (`x-ratelimit-remaining` começa em 20); o cliente pausa ao chegar a zero. Se estiver cancelado ou não for encontrado, fica `cancelado`.
+- **Estado de um item** (`ingest.djen.campos.RegraEstado`):
+  - `ativo == false` ou `data_cancelamento` preenchida → **cancelado**;
+  - `status` em `djen.status_cancelamento` (vazio até haver valor confirmado) → **cancelado**;
+  - `ativo == true` e `status` em `djen.status_ativos` (`["P"]`) → **ativo**;
+  - qualquer outra combinação (ex.: `status` desconhecido, `ativo` ausente) → **anomalia**: falha fechada, o acórdão vai para `quarentena` (não é indexado nem exibido), sem ser tratado como cancelamento, e entra na contagem `anomalias` do caderno.
 - Um acórdão cancelado sai da busca (seção 4.5).
 
 **Reprocessamento**: mudanças no parser e na camada de NER são reprocessadas a partir do bruto filtrado, sem rede. Mudanças no **filtro** (ex.: aceitar outro `tipoDocumento`) ou na camada 1 de anonimização (que depende dos destinatários) exigem baixar o caderno de novo. Isso é viável porque os cadernos ficam disponíveis por anos (desde pelo menos 2022); por isso o ZIP não é guardado.
 
-**Rate limit**: cabeçalhos `x-ratelimit-limit`/`x-ratelimit-remaining` lidos a cada resposta; 429 → espera de 1 minuto. Com o caderno, o volume diário cai para poucas requisições (1 caderno novo + checagens de versão).
+**Rate limit**: cabeçalhos `x-ratelimit-limit`/`x-ratelimit-remaining` lidos a cada resposta quando presentes (só o `/comunicacao` os envia); 429 → espera de 1 minuto. Com o caderno, o volume diário cai para poucas requisições (1 caderno novo + checagens de versão).
 
-**Carga inicial**: últimos 90 dias, do mais recente para o mais antigo, um caderno por vez. Isso dá ~90 consultas de metadados, ~5 GB transferidos (o disco nunca guarda mais de um ZIP) e ~80–100 mil ementas.
+**Carga inicial**: últimos 90 dias, do mais recente para o mais antigo, um caderno por vez. Com o volume medido no F1-01, isso dá ~90 consultas de metadados, **até ~14 GB transferidos** (o tmpfs nunca guarda mais de um ZIP) e **até ~200 mil ementas**.
 
 **Carga histórica**: em seguida, percorre **todos os dias úteis** desde o fim da carga inicial até 23/07/2025, sem pular dias de volume baixo nem tratar dia vazio como erro. Como o volume oscila, a estimativa de ~150–250 mil ementas a mais é grosseira e será medida. Em outros tribunais, a cobertura depende da adesão ao DJEN e da data em que cada um passou a publicar ementas de acórdão.
 
@@ -314,6 +322,7 @@ CREATE TABLE acordao (
     id_orgao_fonte           text,
     classe_nome              text,
     classe_codigo_cnj        integer,
+    classe_citacao           text,                   -- DJEN: classe do cabeçalho (usada na citação)
     relator                  text,                   -- forma de exibição
     relator_chave            text,                   -- normalizado p/ filtro (sem títulos/acentos, minúsculo)
     turma_recursal           boolean,
@@ -402,8 +411,8 @@ CREATE INDEX acordao_trecho_hnsw ON acordao_trecho
 
 | Tabela | Conteúdo |
 |---|---|
-| `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao` (lista dos `id` das comunicações recusadas pela falha segura, nunca o conteúdo), `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `iniciado_em`, `processado_em`. Único em `(tribunal, data)`. |
-| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
+| `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao` (lista dos `id` das comunicações recusadas pela falha segura, nunca o conteúdo), `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `iniciado_em`, `processado_em`. Único em `(tribunal, data)`. |
+| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
 | `coleta_bruta` | Metadados de cada arquivo bruto **filtrado**: origem (`caderno_djen_id` ou `coleta_janela_id` + `pagina`), `caminho_arquivo`, `sha256`, `bytes`, `itens`, `recebida_em`, `versao_parser`. Arquivos em `data/raw/{fonte}/{tribunal}/…` (volume Docker). |
 | `acordao_historico` | Versões anteriores de um acórdão quando `hash_conteudo` muda: `acordao_id`, `versao`, `snapshot` (jsonb dos campos normalizados), `substituido_em`. |
 | `classe_cnj` | `codigo`, `nome`, `codigo_pai`, carregada da TPU/CNJ. |
@@ -462,10 +471,10 @@ Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Mó
 
 | Campo | Regra |
 |---|---|
-| `numero_processo` | Remover tudo que não for dígito; exigir 20 dígitos; gerar a máscara `NNNNNNN-DD.AAAA.J.TR.OOOO`; validar o dígito verificador (Res. CNJ 65/2008: `DD = 98 − (NNNNNNNAAAAJTROOOO00 mod 97)`). Número inválido é aceito, mas marcado. |
+| `numero_processo` | DJEN: do campo `numero_processo` (20 dígitos; `numeroprocessocommascara` não existe nos cadernos recentes). Remover tudo que não for dígito; exigir 20 dígitos; gerar a máscara `NNNNNNN-DD.AAAA.J.TR.OOOO`; validar o dígito verificador (Res. CNJ 65/2008: `DD = 98 − (NNNNNNNAAAAJTROOOO00 mod 97)`). Número inválido é aceito, mas marcado. |
 | `relator` | Remover espaços extras; padronizar títulos para exibição (`Desembargador(a)` → `Des.`/`Desa.`; `Juiz(a)` mantido); `relator_chave` = minúsculas, sem acentos, sem títulos. Nomes todos em caixa alta viram *title case*, com exceções (`de`, `da`, `dos`…). |
 | `orgao_julgador` | Espaços normalizados; preservar a grafia da fonte (ordinais como `3ª`). |
-| `classe` | DJEN: `nomeClasse` + `codigoClasse`. TJDFT: `codigoClasseCnj` + nome via `classe_cnj`. |
+| `classe` | Filtros (`classe_nome`, `classe_codigo_cnj`): DJEN `nomeClasse` + `codigoClasse`; TJDFT `codigoClasseCnj` + nome via `classe_cnj`. Citação (`classe_citacao`): DJEN, a classe entre parênteses na célula "Processo" do cabeçalho (difere de `nomeClasse` em 44% das ementas); TJDFT, o nome da classe. |
 | datas | ISO 8601. DJEN: `data_disponibilizacao` do JSON e `data_julgamento` do cabeçalho; **a data de publicação não é calculada**. TJDFT: `dataJulgamento`/`dataPublicacao`, que vêm em UTC e são convertidas para America/Sao_Paulo antes de virar data. |
 | `link_oficial` | DJEN: `https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao` (certidão do CNJ, estável). TJDFT: `https://jurisdf.tjdft.jus.br/acordaos/{uuid}`. Sempre `https`. |
 | `link_tribunal` | DJEN: campo `link` (documento no sistema do tribunal), quando presente. |
@@ -497,7 +506,7 @@ Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Mó
 
 ### 6.3 Anonimização de nomes no texto
 
-O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destinatarios` e `destinatarioadvogados`, nomes de partes pessoa física aparecem no próprio texto da ementa em ~4% dos acórdãos (60 de 1.536 no caderno TJPR de 15/10/2026, piso estimado por heurística), sobretudo em processos criminais e embargos. Por isso, todo acórdão passa por anonimização **antes de qualquer gravação**, inclusive a do bruto. A ordem é obrigatória: camada 1, camada 2, invariante e, só então, gravação e descarte dos destinatários.
+O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destinatarios` e `destinatarioadvogados`, nomes de partes pessoa física aparecem no próprio texto da ementa: o nome completo de um destinatário aparece em 6,9% dos acórdãos (379 de 5.482 nos três cadernos TJPR do F1-01; piso, porque nomes parciais e de terceiros não entram na conta), sobretudo em processos criminais e embargos. Por isso, todo acórdão passa por anonimização **antes de qualquer gravação**, inclusive a do bruto. A ordem é obrigatória: camada 1, camada 2, invariante e, só então, gravação e descarte dos destinatários.
 
 **Camada 1: destinatários da própria comunicação (DJEN)**
 
@@ -712,6 +721,7 @@ TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel.
 - Sem data de julgamento, a citação do DJEN traz só `DJEN de …`.
 - Partes ausentes são omitidas junto com o separador (nunca "Rel. null").
 - Datas em `dd/mm/aaaa`; número sempre com máscara; classe por extenso.
+- `{classe}` é `classe_citacao`: no DJEN, a classe entre parênteses na célula "Processo" do cabeçalho do acórdão, que é a classe do recurso julgado; `nomeClasse` difere dela em 44% das ementas do TJPR (F1-01) e fica em `classe_nome`, só para filtros. Sem `classe_citacao`, usa `classe_nome`.
 - O frontend copia a string exatamente como veio da API.
 
 ---
@@ -779,7 +789,7 @@ Item de resultado:
 
 **Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` uma coleta diária por tribunal do DJEN a partir do horário configurado (padrão 9h, America/Sao_Paulo) e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. A coleta diária revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
 
-Volumes: `pgdata`, `raw` (brutos filtrados), `models` (cache de pesos do Hugging Face). Área temporária `tmp-cadernos` montada como **tmpfs** no `worker`, dimensionada para o maior caderno esperado com folga (um caderno por vez; ~57 MB no TJPR), não persistida e fora de backup.
+Volumes: `pgdata`, `raw` (brutos filtrados), `models` (cache de pesos do Hugging Face). Área temporária `tmp-cadernos` montada como **tmpfs** no `worker`, dimensionada para o maior caderno aceito (um caderno por vez; tmpfs de 1.100 MB para o limite de 1 GB; o maior caderno do TJPR visto no F1-01 tem 163 MB). O tmpfs só ocupa RAM com o ZIP em uso; não é persistido e fica fora de backup.
 
 Configuração por variáveis de ambiente (`.env`, com `.env.example` versionado): conexão, tribunais ativos por conector, taxas, modelo, flags.
 
@@ -787,7 +797,7 @@ Configuração por variáveis de ambiente (`.env`, com `.env.example` versionado
 
 Um único servidor próprio ou VPS de baixo custo (ex.: 4 vCPU, 8–16 GB de RAM, SSD), rodando o mesmo Compose com proxy reverso (Caddy, TLS automático). Backups diários do Postgres (`pg_dump` comprimido) para outro disco ou host. Sem serviços gerenciados pagos.
 
-Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; vetores 768-d ~0,8–1,1 GB + HNSW de tamanho similar; brutos filtrados na casa de centenas de MB. Tráfego do DJEN: ~57 MB/dia por tribunal, mais os cadernos rebaixados por mudança de versão.
+Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; vetores 768-d ~0,8–1,1 GB + HNSW de tamanho similar; brutos filtrados na casa de centenas de MB. Tráfego do DJEN: ~57–163 MB/dia por tribunal (F1-01), mais os cadernos rebaixados por mudança de versão.
 
 ### 12.3 O que muda ao escalar
 

@@ -37,8 +37,14 @@ def test_item_de_ponta_a_ponta() -> None:
     assert (acordao.numero_processo, acordao.numero_processo_mascara) == (digitos, mascara)
     assert acordao.numero_processo_valido
     assert acordao.orgao_julgador == "3ª Câmara Criminal"
-    assert acordao.id_orgao_fonte == "70003"
-    assert (acordao.classe_nome, acordao.classe_codigo_cnj) == ("Apelação Criminal", 417)
+    # idOrgao não existe nos cadernos (F1-01).
+    assert acordao.id_orgao_fonte is None
+    # Filtros: nomeClasse/codigoClasse; citação: a classe do cabeçalho (difere em 44%).
+    assert (acordao.classe_nome, acordao.classe_codigo_cnj) == (
+        "Ação Penal - Procedimento Ordinário",
+        417,
+    )
+    assert acordao.classe_citacao == "Apelação Criminal"
     assert acordao.relator == "Des. Aristeu Prudente Valença"
     assert acordao.relator_chave == "aristeu prudente valenca"
     assert acordao.turma_recursal is False
@@ -74,6 +80,38 @@ def test_hash_de_conteudo() -> None:
     assert dataclasses.replace(a, ativo_fonte=False).hash_conteudo == a.hash_conteudo
     assert dataclasses.replace(a, ementa=a.ementa + " X").hash_conteudo != a.hash_conteudo
     assert dataclasses.replace(a, relator="Outro").hash_conteudo != a.hash_conteudo
+
+
+def test_item_do_formato_recente() -> None:
+    """Sem numeroprocessocommascara, meiocompleto e idOrgao; link nulo (F1-01)."""
+    item = _anonimizado(900012)
+    assert not {"numeroprocessocommascara", "meiocompleto", "idOrgao"} & set(item)
+    assert item["link"] is None
+    acordao = normalizar(item)
+    digitos, mascara = numero_cnj(1012)
+    assert (acordao.numero_processo, acordao.numero_processo_mascara) == (digitos, mascara)
+    assert acordao.link_tribunal is None
+    assert acordao.classe_citacao == acordao.classe_nome == "Apelação Cível"
+
+
+def test_numero_do_cabecalho_conferido_contra_numero_processo(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    item = _anonimizado(900001)
+    assert normalizar(item).numero_processo == item["numero_processo"]
+    divergente = item | {"numero_processo": numero_cnj(4242)[0]}
+    with caplog.at_level("WARNING"):
+        acordao = normalizar(divergente)
+    # Prevalece o campo estruturado, e o aviso traz só o id.
+    assert acordao.numero_processo == numero_cnj(4242)[0]
+    assert [r.getMessage() for r in caplog.records] == [
+        "número do cabeçalho difere do campo estruturado"
+    ]
+
+
+def test_texto_nulo_e_falha_de_parser() -> None:
+    with pytest.raises(FalhaParser):
+        normalizar(_anonimizado(900001) | {"texto": None})
 
 
 def test_link_do_tribunal_invalido_e_descartado() -> None:

@@ -17,7 +17,8 @@ from buscajus.ingest.djen.parser import VERSAO_PARSER
 from buscajus.ingest.djen.versoes import verificar_versoes
 from buscajus.ingest.reprocessamento import reprocessar_cadernos
 from buscajus.ingest.texto import chave
-from fixtures.djen import PASTA, dados
+from buscajus.ingest.upsert import MOTIVO_ANOMALIA
+from fixtures.djen import PASTA, dados, item_ementa
 
 from .anonimizacao_ajuda import DetectorFalso
 from .djen_ajuda import DIA, HOJE, URL_API, ler_json, url_metadados
@@ -110,7 +111,7 @@ def test_nova_versao_reprocessa_e_confere_ausentes(
             coleta.cliente,
             coleta.bruto,
             url_api=URL_API,
-            status_cancelamento=config.djen.status_cancelamento,
+            regra=fabrica.regra_estado(config),
             tribunal="TJPR",
             hoje=HOJE,
         )
@@ -222,3 +223,29 @@ def test_cli_reprocessar(
     saida = json.loads(capsys.readouterr().out)
     assert saida[0]["itens"] == 20
     assert saida[0]["quarentena"] == 1
+
+
+def test_anomalia_e_texto_nulo_nao_derrubam_o_caderno(
+    coleta: fabrica.ColetaDjen, banco: Engine
+) -> None:
+    anonimizar = criar_anonimizador(DetectorFalso())
+    itens = [anonimizar(item_ementa(e)) for e in dados.EMENTAS[:3]]
+    assert all(isinstance(i, dict) for i in itens)
+    itens[0] = itens[0] | {"status": "X"}  # status não reconhecido
+    itens[1] = itens[1] | {"texto": None}  # 3 casos no F1-01
+    with banco.begin() as conexao:
+        contadores = coleta.processador.processar_itens(conexao, itens, None)  # type: ignore[arg-type]
+    assert (contadores.anomalias, contadores.falhas_parser, contadores.cancelados) == (1, 1, 0)
+    with banco.connect() as conexao:
+        linhas = dict(
+            conexao.execute(
+                text(
+                    "SELECT id_fonte, situacao::text || ':' || coalesce(motivo_situacao, '') "
+                    "FROM acordao"
+                )
+            ).all()
+        )
+    assert linhas == {
+        "900001": f"quarentena:{MOTIVO_ANOMALIA}",
+        "900003": "ativo:",
+    }

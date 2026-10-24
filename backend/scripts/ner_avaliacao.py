@@ -307,6 +307,8 @@ def cmd_avaliar(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    # No Windows a saída padrão é cp1252; os rótulos e mensagens têm acentos.
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="comando", required=True)
     p = sub.add_parser("preanotar")

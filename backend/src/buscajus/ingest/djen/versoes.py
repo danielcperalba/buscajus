@@ -15,10 +15,11 @@ from sqlalchemy import Engine, text
 from buscajus.ingest.bruto import ArmazenamentoBruto, caminho_caderno
 from buscajus.ingest.conector import UnidadeColeta
 from buscajus.ingest.djen import caderno
+from buscajus.ingest.djen.campos import EstadoFonte, RegraEstado
 from buscajus.ingest.djen.comunicacao import checar_comunicacao
 from buscajus.ingest.http import ClienteHttp
 from buscajus.ingest.runner import Orquestrador, Resultado
-from buscajus.ingest.upsert import marcar_cancelado
+from buscajus.ingest.upsert import MOTIVO_ANOMALIA, marcar_situacao
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class VerificacaoCaderno:
     reprocessado: bool = False
     ausentes: int = 0
     cancelados: int = 0
+    anomalias: int = 0
     erro: str | None = None
 
 
@@ -41,7 +43,7 @@ def verificar_versoes(
     bruto: ArmazenamentoBruto,
     *,
     url_api: str,
-    status_cancelamento: list[str],
+    regra: RegraEstado,
     tribunal: str,
     hoje: date,
     dias: int = 30,
@@ -91,7 +93,7 @@ def verificar_versoes(
             cliente,
             bruto,
             url_api,
-            status_cancelamento,
+            regra,
             tribunal,
             linha.id,
             linha.data,
@@ -105,7 +107,7 @@ def _conferir_ausentes(
     cliente: ClienteHttp,
     bruto: ArmazenamentoBruto,
     url_api: str,
-    status_cancelamento: list[str],
+    regra: RegraEstado,
     tribunal: str,
     id_caderno: int,
     data: date,
@@ -143,9 +145,20 @@ def _conferir_ausentes(
             data_disponibilizacao=data,
             id_comunicacao=acordao.id_fonte,
         )
-        if situacao.cancelada(status_cancelamento):
-            with engine.begin() as conexao:
-                marcar_cancelado(
-                    conexao, acordao.id, f"ausente na versão {estado.versao} do caderno"
-                )
-            resultado.cancelados += 1
+        match situacao.estado(regra):
+            case EstadoFonte.CANCELADA:
+                with engine.begin() as conexao:
+                    marcar_situacao(
+                        conexao,
+                        acordao.id,
+                        "cancelado",
+                        f"ausente na versão {estado.versao} do caderno",
+                    )
+                resultado.cancelados += 1
+            case EstadoFonte.ANOMALA:
+                # Falha fechada: sai do índice, sem ser tratado como cancelamento.
+                with engine.begin() as conexao:
+                    marcar_situacao(conexao, acordao.id, "quarentena", MOTIVO_ANOMALIA)
+                resultado.anomalias += 1
+            case EstadoFonte.ATIVA:
+                pass

@@ -58,6 +58,8 @@ class Contadores:
     quarentena: int = 0
     cancelados: int = 0
     bloqueados: int = 0
+    # Estado da fonte não reconhecido (ex.: status desconhecido): vai para a quarentena.
+    anomalias: int = 0
 
     def somar(self, outro: "Contadores") -> None:
         self.recebidos += outro.recebidos
@@ -68,6 +70,7 @@ class Contadores:
         self.quarentena += outro.quarentena
         self.cancelados += outro.cancelados
         self.bloqueados += outro.bloqueados
+        self.anomalias += outro.anomalias
 
 
 @dataclass(frozen=True)

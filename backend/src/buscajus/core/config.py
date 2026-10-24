@@ -47,13 +47,16 @@ class ConfigDjen(BaseModel):
     inicio_ementas: dict[str, date] = {"TJPR": date(2025, 7, 23)}
     tipos_documento_aceitos: list[str] = ["Ementa de Acórdão"]
     requisicoes_por_segundo: float = Field(default=1.0, gt=0)
-    # O ZIP fica no tmpfs do worker (256 MB no compose); o maior caderno do TJPR tem ~57 MB.
-    limite_bytes_caderno: int = Field(default=200 * 1024 * 1024, gt=0)
+    # O ZIP fica no tmpfs do worker (1100 MB no compose). Maior caderno do TJPR visto no
+    # F1-01: 163 MB (23/10/2026); acima do alerta, o download segue com aviso no log.
+    limite_bytes_caderno: int = Field(default=1024 * 1024 * 1024, gt=0)
+    alerta_bytes_caderno: int = Field(default=500 * 1024 * 1024, gt=0)
     # Downloads cujo SHA-256 não confere com o campo hash, antes de marcar erro.
     tentativas_hash: int = Field(default=3, ge=1)
-    # Valores de status de comunicação cancelada (a confirmar no F1-01); ativo = false e
-    # data_cancelamento preenchida também indicam cancelamento.
-    status_cancelamento: list[str] = ["C"]
+    # Status de comunicação ativa (F1-01: "P" em 100%) e de cancelada (nenhum valor confirmado;
+    # ativo = false e data_cancelamento preenchida bastam). Outro status → anomalia.
+    status_ativos: list[str] = ["P"]
+    status_cancelamento: list[str] = []
 
     @field_validator("tribunais")
     @classmethod

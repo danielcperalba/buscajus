@@ -16,7 +16,7 @@ As ementas contêm nomes de vítimas, testemunhas e corréus, mesmo depois da ca
 
 Os comandos rodam em `backend/`, numa máquina no Brasil (a API do DJEN bloqueia IPs de fora).
 
-1. **Amostra.** Baixa os cadernos das datas pedidas, aplica a camada 1 e o mascaramento de CPF e sorteia 50% de ementas criminais, 25% de família (11ª e 12ª Câmaras Cíveis) e 25% de cíveis:
+1. **Amostra.** Baixa os cadernos das datas pedidas, aplica a camada 1 e o mascaramento de CPF e sorteia 50% de ementas criminais, 25% de família (11ª e 12ª Câmaras Cíveis, que no TJPR julgam família, sucessões e ECA, como confirmado com o tribunal) e 25% de cíveis:
 
    ```bash
    uv run python scripts/ner_amostragem.py --saida /caminho/criptografado/ner-avaliacao-privado \

@@ -5,6 +5,7 @@ import respx
 
 from buscajus.core.config import ConfigHttp
 from buscajus.ingest.conector import ErroColeta
+from buscajus.ingest.djen.campos import EstadoFonte, RegraEstado
 from buscajus.ingest.djen.comunicacao import EstadoComunicacao, checar_comunicacao
 from buscajus.ingest.http import ClienteHttp
 from fixtures.djen import dados, numero_cnj
@@ -42,11 +43,13 @@ def test_marca_cancelada(cliente: ClienteHttp) -> None:
     estado = _checar(cliente, 900020, _ementa(900020).sequencial)
     assert estado.encontrada
     assert estado.ativo is False
-    assert estado.cancelada(["C"])
+    assert estado.estado(RegraEstado()) is EstadoFonte.CANCELADA
     params = rota.calls.last.request.url.params
     assert params["siglaTribunal"] == "TJPR"
     assert params["numeroProcesso"] == numero_cnj(_ementa(900020).sequencial)[0]
     assert params["dataDisponibilizacaoInicio"] == params["dataDisponibilizacaoFim"] == "2026-10-15"
+    # numeroComunicacao não é único no DJEN (F1-01): não é usado.
+    assert "numeroComunicacao" not in params
 
 
 @respx.mock
@@ -54,7 +57,7 @@ def test_ativa_nao_e_cancelada(cliente: ClienteHttp) -> None:
     respx.get(URL).respond(200, json=ler_json("comunicacao-900001-ativa.json"))
     estado = _checar(cliente, 900001, _ementa(900001).sequencial)
     assert estado == EstadoComunicacao(encontrada=True, ativo=True, status="P")
-    assert not estado.cancelada(["C"])
+    assert estado.estado(RegraEstado()) is EstadoFonte.ATIVA
 
 
 @respx.mock
@@ -74,7 +77,12 @@ def test_nao_encontrada_conta_como_cancelada(cliente: ClienteHttp, resposta: str
     # Pede um id que não está na resposta.
     estado = _checar(cliente, 999999, 1)
     assert estado == EstadoComunicacao(encontrada=False)
-    assert estado.cancelada(["C"])
+    assert estado.estado(RegraEstado()) is EstadoFonte.CANCELADA
+
+
+def test_status_desconhecido_e_anomalia() -> None:
+    estado = EstadoComunicacao(encontrada=True, ativo=True, status="X")
+    assert estado.estado(RegraEstado()) is EstadoFonte.ANOMALA
 
 
 @respx.mock

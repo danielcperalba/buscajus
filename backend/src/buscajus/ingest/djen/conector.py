@@ -103,6 +103,11 @@ class ConectorDjen:
                     rotulo="download do caderno",
                     limite_bytes=self._config.limite_bytes_caderno,
                 )
+                if tamanho > self._config.alerta_bytes_caderno:
+                    log.warning(
+                        "caderno acima do tamanho de alerta",
+                        extra={"unidade": unidade.descricao, "bytes": tamanho},
+                    )
                 if caderno.sha256_arquivo(arquivo) != meta.hash:
                     log.warning(
                         "SHA-256 do caderno não confere com os metadados",
