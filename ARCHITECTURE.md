@@ -14,6 +14,8 @@
 >
 > **Revisão 7 (24/10/2026)**: Fase 2. API do TJDFT acessível do Brasil (1.766.288 acórdãos em 24/10/2026); spike de estrutura só com agregados (seção 3.3): o filtro `dataPublicacao` usa a data UTC, o dia continua recebendo registros depois de publicado, `localDePublicacao` é `DJE` ou `PJe`, campos extras fora da lista branca. Tabela `classe_cnj` carregada de um arquivo versionado da TPU (seção 4.4).
 >
+> **Revisão 8 (24/10/2026)**: apagamento do conteúdo de acórdãos removidos (seção 4.5), conferência mensal dos dias antigos do TJDFT com as contagens medidas (seção 3.3) e logs em stderr (seção 6.2).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -261,7 +263,8 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 - **Unidade de coleta**: um dia do filtro `dataPublicacao`, paginado de 40 em 40 até `hits.value`. Não é preciso subdividir: a paginação profunda funciona.
 - **Fuso**: `dataPublicacao` e `dataJulgamento` vêm em **UTC**, e o filtro `dataPublicacao` compara a **data UTC** (100% dos 2.093 registros do spike). A maioria é publicada às `03:00Z` (meia-noite em São Paulo), mas 2,2% saem entre 0h e 3h UTC, ou seja, ainda no dia anterior em São Paulo. A data gravada é sempre convertida para America/Sao_Paulo; a unidade de coleta continua sendo a data UTC do filtro. Para não perder registros na virada do dia, a coleta diária consulta o dia mais recente **e reconsulta o dia anterior**, deduplicando por `uuid` (o upsert por `fonte + id_fonte` já garante isso).
 - **Dia ainda aberto**: um dia já publicado continua recebendo registros (20/10/2026 tinha 231 acórdãos no F2-01 e 691 em 24/10), o que reforça a recoleta dos últimos 30 dias.
-- **Recoleta**: os últimos 30 dias são reconsultados diariamente, para capturar correções e mudanças de segredo (~7 mil registros, ~175 requisições/dia).
+- **Recoleta**: os últimos 30 dias são reconsultados diariamente, para capturar correções e mudanças de segredo (~7 mil registros, ~175 requisições/dia). Contagem por dia de publicação dos últimos 60 dias, medida pelo dono do projeto em 24/10/2026 (média dos dias úteis): 502 (0 a 6 dias atrás), 400 (7 a 13, com feriado), 632 (14 a 29) e 572 (30 a 59). Não há sinal de crescimento depois de 30 dias, então a janela de 30 dias é mantida.
+- **Conferência mensal** (F2-14): uma vez por mês, para os dias de 31 a 90 dias atrás, uma requisição de tamanho 1 por dia compara `hits.value` com o total registrado na última coleta (`coleta_janela.total_fonte`); só os dias que mudaram (ou nunca concluídos) são recoletados. São ~60 requisições por mês.
 - **Carga inicial**: últimos 90 dias (alinhado ao DJEN), cerca de 15 mil acórdãos e algumas centenas de requisições.
 - **Carga completa** (fora do MVP): ~1,76 mi registros ÷ 40 ≈ **44 mil requisições** (~12 h a 1 req/s, mais pausas), executada dia a dia, do mais recente ao mais antigo, em horário de baixa carga.
 - **Link oficial**: `https://jurisdf.tjdft.jus.br/acordaos/{uuid}`. Verificado no navegador: a página mostra acórdão, processo, relator, órgão, julgamento, publicação e ementa. O padrão do inteiro teor (`acordaos/{numeroAcordao}/inteiro-teor/{uuid}`) fica registrado para o futuro, mas não é usado no MVP.
@@ -453,6 +456,8 @@ Para cada `AcordaoNormalizado`:
 
 Acórdãos cancelados **não são apagados** (rastreabilidade); apenas deixam de aparecer na busca e no detalhe (o detalhe responde 410 com aviso de cancelamento).
 
+**Removidos** (F2-13, `ingest.remocao.remover`; segredo superveniente no TJDFT e pedido de remoção aceito): além de `situacao = 'removido'`, o conteúdo é apagado. Cria-se um `bloqueio` por fonte + id (nenhuma recoleta nem reprocessamento reinsere o acórdão); ementa e decisão são apagadas em `acordao` e nos snapshots de `acordao_historico`; os trechos são apagados (F3-09); e os arquivos brutos em que o registro pode estar (o da última coleta e todos os dos diretórios das unidades do dia, registrados ou não) são reescritos sem ele, com `coleta_bruta` atualizada. Um item bloqueado que reaparece numa coleta ou num reprocessamento não é gravado no banco e sai do arquivo bruto do lote. Fica no banco só o registro de que o acórdão existiu (número, datas, links, motivo).
+
 Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha nova com `INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING` (corrida entre transações vira atualização); o snapshot do histórico é `to_jsonb` da linha sem `busca_tsv`. `removido` e `duplicado` não são desfeitos pela recoleta. O reprocessamento sem rede (`buscajus ingest reprocessar`) relê o bruto da versão corrente do caderno e refaz normalização, PII e upsert; a camada 1 não pode ser refeita daí, porque os destinatários nunca são gravados.
 
 ---
@@ -514,7 +519,7 @@ Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Mó
 | Verificação de PII residual | Varredura final da ementa normalizada (seção 6.4). |
 | Upsert | Respeito a `bloqueio` (remoções) e a segredo superveniente. |
 | Checagens pontuais | O endpoint `/comunicacao` é usado só para conferir uma comunicação específica; da resposta só se leem os campos de estado (`ativo`, `status`, `data_cancelamento`), e ela não é gravada. |
-| Logs | Não registrar conteúdo de comunicações nem termos de busca completos em logs persistentes; métricas de busca são agregadas. Retenção de logs de acesso: curta (ex.: 30 dias). |
+| Logs | Não registrar conteúdo de comunicações nem termos de busca completos em logs persistentes; métricas de busca são agregadas. Retenção de logs de acesso: curta (ex.: 30 dias). Os logs (JSON, uma linha por evento) vão para stderr; a saída padrão da CLI é só o resultado. |
 
 ### 6.3 Anonimização de nomes no texto
 
@@ -581,7 +586,7 @@ Se encontrar algo, o acórdão vai para `quarentena` (não indexado, não exibid
 
 - Página pública `/remocao` com formulário (número do processo ou link do resultado, motivo, e-mail de contato) e um e-mail de contato exibido como texto.
 - `POST /api/v1/remocao` grava em `pedido_remocao`. O e-mail do solicitante é usado só para responder e é apagado após a resolução e o prazo de retenção.
-- Remoção aceita → `bloqueio` + `situacao = 'removido'` + trechos apagados. A recoleta não reinsere.
+- Remoção aceita → regra geral da seção 4.5 (`ingest.remocao.remover`): `bloqueio`, `situacao = 'removido'`, ementa e decisão apagadas no banco e no histórico, trechos apagados e arquivos brutos reescritos sem o registro. A recoleta não reinsere.
 - A página `/privacidade` descreve os dados tratados, a base legal, as fontes e o canal de remoção.
 
 ### 6.6 Verificações automatizadas

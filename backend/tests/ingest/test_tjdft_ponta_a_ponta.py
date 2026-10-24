@@ -20,6 +20,7 @@ from buscajus.ingest.http import ClienteHttp
 from buscajus.ingest.runner import Orquestrador, Resultado
 from buscajus.ingest.tjdft.campos import LISTA_BRANCA
 from buscajus.ingest.tjdft.conector import ConectorTjdft
+from buscajus.ingest.tjdft.conferencia import conferir_dias_antigos
 from buscajus.ingest.tjdft.normalizacao import VERSAO_NORMALIZACAO, NormalizadorTjdft
 from buscajus.ingest.tjdft.processamento import MOTIVO_SEGREDO, ProcessadorTjdft
 from fixtures.tjdft import dados
@@ -58,11 +59,12 @@ def orquestrador(banco: Engine, raw: Path, relogio: RelogioFalso) -> Iterator[Or
         classes = nomes_por_codigo(conexao)
     with ClienteHttp(ConfigHttp(), 1.0, relogio=relogio) as cliente:
         conector = ConectorTjdft(config_tjdft(), cliente, AnonimizadorFalso(), hoje=lambda: HOJE)
+        bruto = ArmazenamentoBruto(raw)
         yield Orquestrador(
             banco,
             conector,
-            ArmazenamentoBruto(raw),
-            processar=ProcessadorTjdft(NormalizadorTjdft(classes)),
+            bruto,
+            processar=ProcessadorTjdft(NormalizadorTjdft(classes), bruto),
             estatisticas_http=cliente.estatisticas,
             versao_parser=VERSAO_NORMALIZACAO,
         )
@@ -225,3 +227,72 @@ def test_relatorio_mostra_os_descartados_por_segredo(
     assert janelas[0]["descartados_segredo"] == 1
     tabela = status.formatar_tabela(janelas, status.COLUNAS_JANELAS, "Janelas")
     assert "SEGREDO" in tabela
+
+
+def test_segredo_superveniente_apaga_o_conteudo_do_banco_e_do_disco(
+    banco: Engine, orquestrador: Orquestrador, servidor: ServidorTjdft, raw: Path
+) -> None:
+    """F2-13: nem o texto atual nem versões anteriores sobram em banco ou disco."""
+    assert _coletar(orquestrador, DIA) is Resultado.CONCLUIDA
+    # Uma correção na fonte gera versão anterior em acordao_historico.
+    corrigido = alterar_registro(
+        fixture(DIA, 0), 1, lambda r: r.update(ementa=r["ementa"] + " MARCADORCORRECAO.")
+    )
+    servidor.servir(DIA, 0, corrigido)
+    assert _coletar(orquestrador, DIA, forcar=True) is Resultado.CONCLUIDA
+    assert _acordaos(banco)[uuid(1)].versao == 2
+    # Página que sobrou de uma coleta antiga, fora de coleta_bruta, com o registro.
+    antigo = next(i for i in _brutos(raw) if i["uuid"] == uuid(1))
+    ArmazenamentoBruto(raw).gravar(
+        f"tjdft/TJDFT/{dados.DIA}/p00009.jsonl.gz", [antigo], LISTA_BRANCA
+    )
+
+    sigiloso = alterar_registro(fixture(DIA, 0), 1, lambda r: r.update(segredoJustica=True))
+    servidor.servir(DIA, 0, sigiloso)
+    assert _coletar(orquestrador, DIA, forcar=True) is Resultado.CONCLUIDA
+
+    def verificar() -> None:
+        removido = _acordaos(banco)[uuid(1)]
+        assert (removido.situacao, removido.ementa, removido.decisao) == ("removido", "", None)
+        with banco.connect() as conexao:
+            assert conexao.scalar(text("SELECT count(*) FROM bloqueio")) == 1
+        gravado = _banco_inteiro(banco) + json.dumps(_brutos(raw), ensure_ascii=False)
+        for trecho in ("NEGATIVA DE COBERTURA", "MARCADORCORRECAO"):
+            assert trecho not in gravado
+        assert all(item["uuid"] != uuid(1) for item in _brutos(raw))
+
+    verificar()
+    # A fonte tira o segredo: o bloqueio impede a volta, e o bruto continua sem o registro.
+    servidor.servir(DIA, 0, fixture(DIA, 0))
+    assert _coletar(orquestrador, DIA, forcar=True) is Resultado.CONCLUIDA
+    assert _janela(banco, DIA).bloqueados == 1
+    verificar()
+
+
+def test_conferencia_recoleta_so_os_dias_que_mudaram(
+    banco: Engine, orquestrador: Orquestrador, servidor: ServidorTjdft
+) -> None:
+    """F2-14: uma requisição de tamanho 1 por dia; recoleta só o que diverge."""
+    assert _coletar(orquestrador, DIA) is Resultado.CONCLUIDA  # 45
+    assert _coletar(orquestrador, DIA_VIRADA) is Resultado.CONCLUIDA  # 3
+    servidor.pedidos.clear()
+    servidor.corpos.clear()
+    # Na conferência, 15/10 passou a ter 4 registros; a recoleta já vê os 3 de novo.
+    mais_um = fixture(DIA_VIRADA, 0)
+    mais_um["hits"]["value"] = 4
+    servidor.servir(DIA_VIRADA, 0, mais_um, fixture(DIA_VIRADA, 0))
+
+    conector = orquestrador._conector
+    assert isinstance(conector, ConectorTjdft)
+    dias = conferir_dias_antigos(
+        banco, conector, orquestrador, hoje=date(2026, 11, 15), de_dias=30, ate_dias=32
+    )
+    por_dia = {d.dia: d for d in dias}
+    assert [d.dia for d in dias] == [DIA_REPETIDO, DIA_VIRADA, DIA]
+    assert (por_dia[DIA].total_fonte, por_dia[DIA].recoletado) == (45, False)
+    assert (por_dia[DIA_VIRADA].total_fonte, por_dia[DIA_VIRADA].total_coletado) == (4, 3)
+    assert por_dia[DIA_VIRADA].recoletado and por_dia[DIA_VIRADA].resultado == "concluida"
+    assert por_dia[DIA_REPETIDO].recoletado and por_dia[DIA_REPETIDO].total_coletado is None
+    # O dia que bateu custou uma única requisição, de tamanho 1.
+    pedidos_dia = [c for c in servidor.corpos if c["termosAcessorios"][1]["valor"] == dados.DIA]
+    assert [c["tamanho"] for c in pedidos_dia] == [1]

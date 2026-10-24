@@ -20,9 +20,11 @@ from buscajus.db.engine import obter_engine
 from buscajus.ingest import agendador as modulo_agendador
 from buscajus.ingest.agendador import (
     TAREFA_DJEN_DIARIO,
+    TAREFA_TJDFT_CONFERENCIA,
     TAREFA_TJDFT_DIARIO,
     Agendador,
     coleta_tjdft_diaria,
+    conferencia_tjdft_mensal,
 )
 from buscajus.ingest.anonimizacao.pipeline import ErroAnonimizacao
 from buscajus.ingest.conector import UnidadeColeta
@@ -164,9 +166,10 @@ def test_cli_tjdft(
     monkeypatch.setattr(fabrica, "criar_coleta", criar)
     codigo = cli.main(["ingest", "tjdft", "--de", dados.DIA, "--ate", dados.DIA])
     assert codigo == 0
-    saida = capsys.readouterr().out
-    # Os logs também vão para a saída padrão; o resumo é o último documento JSON.
-    (resumo,) = json.loads(saida[saida.index("[\n") :])
+    saida = capsys.readouterr()
+    # stdout é só o resumo JSON; os logs vão para stderr.
+    (resumo,) = json.loads(saida.out)
+    assert '"unidade finalizada"' in saida.err
     assert resumo == {
         "unidade": f"tjdft/TJDFT/{dados.DIA}",
         "resultado": "concluida",
@@ -269,3 +272,27 @@ def test_tarefa_diaria_recoleta_os_ultimos_30_dias(
     assert [u.data_inicio for u in unidades[:2]] == [hoje, date(2026, 10, 19)]
     assert unidades[-1].data_inicio == date(2026, 9, 20)
     assert len(unidades) == 31
+
+
+def test_conferencia_mensal_so_no_dia_configurado(banco: Engine) -> None:
+    relogio = Relogio(datetime(2026, 11, 1, 8, 30, tzinfo=FUSO))
+    nada = lambda _p: None  # noqa: E731
+    agendador = Agendador(
+        banco,
+        _config_agendador(),
+        {TAREFA_TJDFT_DIARIO: nada, TAREFA_TJDFT_CONFERENCIA: nada},
+        agora=relogio,
+    )
+    assert agendador.ciclo() == 2
+    relogio.quando = datetime(2026, 11, 2, 8, 30, tzinfo=FUSO)
+    assert agendador.ciclo() == 1
+    assert [t for t, _ in _tipos(banco)] == [
+        TAREFA_TJDFT_DIARIO,
+        TAREFA_TJDFT_CONFERENCIA,
+        TAREFA_TJDFT_DIARIO,
+    ]
+
+
+def test_conferencia_mensal_sem_ner_falha_fechada(banco: Engine) -> None:
+    with pytest.raises(ErroAnonimizacao):
+        conferencia_tjdft_mensal(Config(), banco)({"data": "2026-11-01"})

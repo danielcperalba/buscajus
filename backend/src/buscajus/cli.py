@@ -4,6 +4,7 @@ Comandos:
 
 - ``buscajus ingest djen --tribunal T --de AAAA-MM-DD --ate AAAA-MM-DD [--forcar]``
 - ``buscajus ingest tjdft --de AAAA-MM-DD --ate AAAA-MM-DD [--forcar]``
+- ``buscajus ingest conferir-tjdft [--de-dias 31] [--ate-dias 90]``
 - ``buscajus ingest reprocessar --fonte djen [--tribunal T] --de AAAA-MM-DD --ate AAAA-MM-DD``
 - ``buscajus ingest verificar-versoes --tribunal T [--dias 30]``
 - ``buscajus ingest status [--fonte F] [--tribunal T] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]``
@@ -31,6 +32,7 @@ from buscajus.ingest.djen.versoes import verificar_versoes
 from buscajus.ingest.reprocessamento import reprocessar_cadernos
 from buscajus.ingest.runner import ResumoUnidade
 from buscajus.ingest.tjdft import fabrica as fabrica_tjdft
+from buscajus.ingest.tjdft.conferencia import conferir_dias_antigos
 from buscajus.ingest.tjdft.fabrica import ConectorDesativado
 
 
@@ -60,6 +62,13 @@ def _parser() -> argparse.ArgumentParser:
     tjdft.add_argument("--ate", type=_data, required=True)
     tjdft.add_argument("--forcar", action="store_true", help="recoleta dias já concluídos")
     tjdft.set_defaults(executar=_tjdft)
+
+    conf = subcomandos.add_parser(
+        "conferir-tjdft", help="confere os dias antigos do TJDFT e recoleta os que mudaram"
+    )
+    conf.add_argument("--de-dias", type=int, default=31)
+    conf.add_argument("--ate-dias", type=int, default=90)
+    conf.set_defaults(executar=_conferir_tjdft)
 
     rep = subcomandos.add_parser("reprocessar", help="refaz o parser a partir do bruto, sem rede")
     rep.add_argument("--fonte", choices=["djen"], required=True)
@@ -126,6 +135,24 @@ def _tjdft(args: argparse.Namespace) -> int:
         coleta.fechar()
     _imprimir([_resumo_tjdft(r) for r in resumos])
     return 1 if any(r.erro for r in resumos) else 0
+
+
+def _conferir_tjdft(args: argparse.Namespace) -> int:
+    engine = obter_engine()
+    coleta = fabrica_tjdft.criar_coleta(obter_config(), engine)
+    try:
+        dias = conferir_dias_antigos(
+            engine,
+            coleta.conector,
+            coleta.orquestrador,
+            hoje=hoje_sao_paulo(),
+            de_dias=args.de_dias,
+            ate_dias=args.ate_dias,
+        )
+    finally:
+        coleta.fechar()
+    _imprimir([vars(d) for d in dias])
+    return 1 if any(d.erro for d in dias) else 0
 
 
 def _resumo_tjdft(resumo: ResumoUnidade) -> dict[str, object]:

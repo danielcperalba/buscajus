@@ -18,11 +18,13 @@ from buscajus.db.engine import obter_engine
 from buscajus.ingest import temporario
 from buscajus.ingest.agendador import (
     TAREFA_DJEN_DIARIO,
+    TAREFA_TJDFT_CONFERENCIA,
     TAREFA_TJDFT_DIARIO,
     Agendador,
     Executor,
     coleta_djen_diaria,
     coleta_tjdft_diaria,
+    conferencia_tjdft_mensal,
 )
 
 log = logging.getLogger(__name__)
@@ -59,6 +61,7 @@ def main() -> None:
     executores: dict[str, Executor] = {TAREFA_DJEN_DIARIO: coleta_djen_diaria(config, engine)}
     if config.tjdft.ativo:
         executores[TAREFA_TJDFT_DIARIO] = coleta_tjdft_diaria(config, engine)
+        executores[TAREFA_TJDFT_CONFERENCIA] = conferencia_tjdft_mensal(config, engine)
     agendador = Agendador(engine, config, executores)
     log.info(
         "worker iniciado (agendador ligado)",

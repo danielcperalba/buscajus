@@ -137,6 +137,11 @@ class ConectorTjdft:
             )
         return lotes
 
+    def contar(self, dia: date) -> int:
+        """``hits.value`` do dia, com uma requisição de tamanho 1 (conferência, F2-14)."""
+        total: int = self._pagina(dia, 0, tamanho=1)["hits"]["value"]
+        return total
+
     def _lote(
         self, dia: date, numero: int, registros: list[Mapping[str, Any]], total: int
     ) -> LoteBruto:
@@ -169,7 +174,7 @@ class ConectorTjdft:
             ids_segredo=ids_segredo,
         )
 
-    def _pagina(self, dia: date, numero: int) -> dict[str, Any]:
+    def _pagina(self, dia: date, numero: int, *, tamanho: int | None = None) -> dict[str, Any]:
         resposta = self._cliente.requisitar(
             "POST",
             self._config.url_api,
@@ -177,7 +182,7 @@ class ConectorTjdft:
             json={
                 "query": "",
                 "pagina": numero,
-                "tamanho": self._config.tamanho_pagina,
+                "tamanho": tamanho or self._config.tamanho_pagina,
                 "termosAcessorios": [
                     {"campo": "base", "valor": BASE},
                     {"campo": "dataPublicacao", "valor": dia.isoformat()},

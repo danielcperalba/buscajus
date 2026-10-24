@@ -106,6 +106,11 @@ class ConfigAgendador(BaseModel):
     # Dias do TJDFT recoletados todo dia (mudanças de segredo e registros publicados com
     # atraso); inclui a reconsulta do dia anterior.
     dias_recoleta_tjdft: int = Field(default=30, ge=1)
+    # Conferência mensal (F2-14): no dia do mês indicado, compara o total da fonte com o
+    # coletado nos dias de dias_recoleta_tjdft + 1 até dias_conferencia_tjdft atrás e recoleta
+    # só os que mudaram.
+    dia_conferencia_tjdft: int = Field(default=1, ge=1, le=28)
+    dias_conferencia_tjdft: int = Field(default=90, ge=1)
     # Dias anteriores revisitados na coleta diária (cadernos publicados com atraso).
     dias_retroativos: int = Field(default=3, ge=0)
     # Janela da checagem de versões dos cadernos (F1-16).

@@ -5,7 +5,9 @@ este worker sabe executar e executa as pendentes que já venceram:
 
 - DJEN, uma por tribunal: cadernos recentes e checagem de versões;
 - TJDFT: o dia mais recente, a reconsulta do anterior e a recoleta dos últimos
-  ``dias_recoleta_tjdft`` dias (mudanças de segredo e registros publicados com atraso).
+  ``dias_recoleta_tjdft`` dias (mudanças de segredo e registros publicados com atraso);
+- TJDFT, uma vez por mês (``dia_conferencia_tjdft``): conferência dos dias de 31 a
+  ``dias_conferencia_tjdft`` atrás, recoletando só os que mudaram (F2-14).
 
 Cada execução fica registrada na própria ``tarefa`` (status, tentativas, último erro sem
 conteúdo).
@@ -29,12 +31,14 @@ from buscajus.ingest.djen import fabrica
 from buscajus.ingest.djen.fabrica import criar_coleta
 from buscajus.ingest.djen.versoes import verificar_versoes
 from buscajus.ingest.tjdft import fabrica as fabrica_tjdft
+from buscajus.ingest.tjdft.conferencia import conferir_dias_antigos
 
 log = logging.getLogger(__name__)
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 TAREFA_DJEN_DIARIO = "djen_diario"
 TAREFA_TJDFT_DIARIO = "tjdft_diario"
+TAREFA_TJDFT_CONFERENCIA = "tjdft_conferencia_mensal"
 
 Executor = Callable[[Mapping[str, Any]], None]
 
@@ -71,6 +75,8 @@ class Agendador:
         ]
         if self._config.tjdft.ativo:
             tarefas.append((TAREFA_TJDFT_DIARIO, config.horario_tjdft, {"data": hoje}))
+            if agora.day == config.dia_conferencia_tjdft:
+                tarefas.append((TAREFA_TJDFT_CONFERENCIA, config.horario_tjdft, {"data": hoje}))
         for tipo, horario_do_dia, payload in tarefas:
             horario = datetime.combine(agora.date(), horario_do_dia, FUSO)
             if agora < horario or tipo not in self._executores:
@@ -179,5 +185,34 @@ def coleta_tjdft_diaria(config: Config, engine: Engine) -> Executor:
             coleta.orquestrador.executar(unidades, forcar=True)
         finally:
             coleta.fechar()
+
+    return executar
+
+
+def conferencia_tjdft_mensal(config: Config, engine: Engine) -> Executor:
+    """Executor da conferência mensal do TJDFT (F2-14)."""
+
+    def executar(payload: Mapping[str, Any]) -> None:
+        hoje = datetime.fromisoformat(str(payload["data"])).date()
+        coleta = fabrica_tjdft.criar_coleta(config, engine)  # sem NER: falha fechada aqui
+        try:
+            dias = conferir_dias_antigos(
+                engine,
+                coleta.conector,
+                coleta.orquestrador,
+                hoje=hoje,
+                de_dias=config.agendador.dias_recoleta_tjdft + 1,
+                ate_dias=config.agendador.dias_conferencia_tjdft,
+            )
+        finally:
+            coleta.fechar()
+        log.info(
+            "conferência do TJDFT concluída",
+            extra={
+                "dias": len(dias),
+                "recoletados": sum(d.recoletado for d in dias),
+                "erros": sum(d.erro is not None for d in dias),
+            },
+        )
 
     return executar
