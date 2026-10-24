@@ -1,0 +1,269 @@
+{
+  "hits": {
+    "value": 45
+  },
+  "agregacoes": {
+    "base": [
+      {
+        "nome": "acordaos",
+        "total": 45,
+        "filhos": [
+          {
+            "nome": "acordaos",
+            "total": 39
+          },
+          {
+            "nome": "acordaos-tr",
+            "total": 6
+          }
+        ]
+      }
+    ],
+    "classe": [
+      {
+        "nome": "Apelação Cível",
+        "total": 13
+      },
+      {
+        "nome": "Agravo de Instrumento",
+        "total": 7
+      },
+      {
+        "nome": "Recurso Inominado Cível",
+        "total": 6
+      },
+      {
+        "nome": "Apelação Criminal",
+        "total": 6
+      },
+      {
+        "nome": "Embargos de Declaração Cível",
+        "total": 6
+      },
+      {
+        "nome": "Agravo Interno Cível",
+        "total": 6
+      },
+      {
+        "nome": "Habeas Corpus Criminal",
+        "total": 1
+      }
+    ],
+    "orgaoJulgador": [
+      {
+        "nome": "6ª Turma Cível",
+        "total": 13
+      },
+      {
+        "nome": "3ª Turma Cível",
+        "total": 12
+      },
+      {
+        "nome": "1ª Turma Cível",
+        "total": 7
+      },
+      {
+        "nome": "2ª Turma Criminal",
+        "total": 6
+      },
+      {
+        "nome": "SEGUNDA TURMA RECURSAL",
+        "total": 5
+      },
+      {
+        "nome": "PRIMEIRA TURMA RECURSAL",
+        "total": 1
+      },
+      {
+        "nome": "1ª Câmara Criminal",
+        "total": 1
+      }
+    ],
+    "relator": [
+      {
+        "nome": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+        "total": 19
+      },
+      {
+        "nome": "DEOCLECIANA MORGADÃO TRAVESSEIRO",
+        "total": 13
+      },
+      {
+        "nome": "HERMENEGILDO SOUTELO VILARONGO",
+        "total": 7
+      },
+      {
+        "nome": "OTACÍLIO VENTANILHA BRUSQUETO",
+        "total": 6
+      }
+    ],
+    "relatorDesignado": [
+      {
+        "nome": "LEOPOLDINA ARRUDÃO CAMBRAIETA",
+        "total": 2
+      }
+    ],
+    "revisor": [
+      {
+        "nome": "SEBASTIÃO REBOLEDO ALMENARIM",
+        "total": 1
+      }
+    ],
+    "segredoJustica": [
+      {
+        "nome": 0,
+        "total": 44
+      },
+      {
+        "nome": 1,
+        "total": 1
+      }
+    ]
+  },
+  "paginacao": {
+    "pagina": 1,
+    "tamanho": 40
+  },
+  "registros": [
+    {
+      "sequencial": 7041,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000041",
+      "identificador": "9900041",
+      "dataJulgamento": "2026-10-06T03:00:00.000Z",
+      "dataPublicacao": "2026-10-14T03:00:00.000Z",
+      "decisao": "CONHECIDO. PARCIALMENTE PROVIDO. UNÂNIME.",
+      "ementa": "PROCESSO CIVIL. EMBARGOS DE DECLARAÇÃO. PREQUESTIONAMENTO. 1. O prequestionamento não dispensa a demonstração de vício no julgado. 2. Valor discutido de R$ 41.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000041-06.2099.8.07.9999",
+      "nomeRelator": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "3ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 1689,
+      "codigoSistjOrgaoJulgador": 103,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7042,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000042",
+      "identificador": "9900042",
+      "dataJulgamento": "2026-10-07T03:00:00.000Z",
+      "dataPublicacao": "2026-10-14T03:00:00.000Z",
+      "decisao": "CONHECIDO. DESPROVIDO. UNÂNIME.",
+      "ementa": "DIREITO CIVIL. APELAÇÃO CÍVEL. CONTRATO DE LOCAÇÃO. DESPEJO POR FALTA DE PAGAMENTO. 1. A falta de pagamento dos aluguéis autoriza a rescisão do contrato e o despejo. 2. Valor discutido de R$ 42.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000042-88.2099.8.07.9999",
+      "nomeRelator": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "1ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 198,
+      "codigoSistjOrgaoJulgador": 101,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7043,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000043",
+      "identificador": "9900043",
+      "dataJulgamento": "2026-10-08T03:00:00.000Z",
+      "dataPublicacao": "2026-10-14T03:00:00.000Z",
+      "decisao": "RECURSO CONHECIDO E PROVIDO. UNÂNIME.",
+      "ementa": "DIREITO DO CONSUMIDOR. APELAÇÃO CÍVEL. CONTRATO BANCÁRIO. JUROS REMUNERATÓRIOS. 1. A taxa de juros só é abusiva quando discrepa substancialmente da média de mercado. 2. Valor discutido de R$ 43.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000043-73.2099.8.07.9999",
+      "nomeRelator": "DEOCLECIANA MORGADÃO TRAVESSEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "6ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 198,
+      "codigoSistjOrgaoJulgador": 106,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7044,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000044",
+      "identificador": "9900044",
+      "dataJulgamento": "2026-10-09T03:00:00.000Z",
+      "dataPublicacao": "2026-10-14T03:00:00.000Z",
+      "decisao": "CONHECIDO. PARCIALMENTE PROVIDO. UNÂNIME.",
+      "ementa": "PROCESSO CIVIL. AGRAVO DE INSTRUMENTO. TUTELA DE URGÊNCIA. REQUISITOS. 1. Ausente a probabilidade do direito, a tutela de urgência deve ser indeferida. 2. Valor discutido de R$ 44.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "PJe",
+      "processo": "0000044-58.2099.8.07.9999",
+      "nomeRelator": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "3ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 202,
+      "codigoSistjOrgaoJulgador": 103,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7045,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000045",
+      "identificador": "9900045",
+      "dataJulgamento": "2026-10-01T03:00:00.000Z",
+      "dataPublicacao": "2026-10-14T03:00:00.000Z",
+      "decisao": "CONHECIDO. DESPROVIDO. UNÂNIME.",
+      "ementa": "PROCESSO CIVIL. AGRAVO INTERNO. DECISÃO MONOCRÁTICA. FUNDAMENTOS NÃO INFIRMADOS. 1. O agravo interno que não infirma os fundamentos da decisão agravada não prospera. 2. Valor discutido de R$ 45.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000045-43.2099.8.07.9999",
+      "nomeRelator": "DEOCLECIANA MORGADÃO TRAVESSEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "6ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 1208,
+      "codigoSistjOrgaoJulgador": 106,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    }
+  ]
+}
