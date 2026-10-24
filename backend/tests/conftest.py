@@ -49,14 +49,18 @@ def engine(url_banco_teste: str) -> Iterator[Engine]:
 
 @pytest.fixture
 def banco(alembic: ConfigAlembic, engine: Engine) -> Iterator[Engine]:
-    """Banco com todas as migrações aplicadas; as tabelas são esvaziadas ao fim do teste."""
+    """Banco com todas as migrações aplicadas; as tabelas são esvaziadas ao fim do teste.
+
+    Tabelas de referência carregadas pelas migrações (``classe_cnj``) são preservadas.
+    """
     command.upgrade(alembic, "head")
     yield engine
     with engine.begin() as conexao:
         tabelas = conexao.scalars(
             text(
                 "SELECT tablename FROM pg_tables "
-                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+                "WHERE schemaname = 'public' "
+                "AND tablename NOT IN ('alembic_version', 'classe_cnj')"
             )
         ).all()
         if tabelas:
