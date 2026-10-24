@@ -73,27 +73,36 @@ def _precedido_de_titulo(texto: str, inicio: int) -> bool:
     return bool(_TITULO_ANTES.search(antes))
 
 
+def selecionar(
+    texto: str, entidades: Sequence[Entidade], protegidos: Sequence[str] = ()
+) -> list[Entidade]:
+    """Entidades que serão substituídas: sem sobreposição e fora das exceções."""
+    trechos = trechos_protegidos(texto, (*EPONIMOS, *protegidos))
+    escolhidas: list[Entidade] = []
+    fim_anterior = 0
+    for entidade in sorted(entidades, key=lambda e: (e.inicio, -e.fim)):
+        if entidade.inicio < fim_anterior or entidade.fim <= entidade.inicio:
+            continue  # sobreposta a uma já escolhida, ou vazia
+        if (
+            sobrepoe(entidade.inicio, entidade.fim, trechos)
+            or _precedido_de_titulo(texto, entidade.inicio)
+            or not iniciais(texto[entidade.inicio : entidade.fim])
+        ):
+            continue
+        escolhidas.append(entidade)
+        fim_anterior = entidade.fim
+    return escolhidas
+
+
 def aplicar(
     texto: str, detector: DetectorPessoas, protegidos: Sequence[str] = ()
 ) -> tuple[str, int]:
     """Troca as pessoas detectadas por iniciais, respeitando as exceções."""
-    entidades = sorted(detector.detectar(texto), key=lambda e: (e.inicio, -e.fim))
-    trechos = trechos_protegidos(texto, (*EPONIMOS, *protegidos))
+    escolhidas = selecionar(texto, detector.detectar(texto), protegidos)
     partes: list[str] = []
     ultimo = 0
-    substituicoes = 0
-    for entidade in entidades:
-        if entidade.inicio < ultimo or entidade.fim <= entidade.inicio:
-            continue  # sobreposta a uma já substituída, ou vazia
-        trecho = texto[entidade.inicio : entidade.fim]
-        if (
-            sobrepoe(entidade.inicio, entidade.fim, trechos)
-            or _precedido_de_titulo(texto, entidade.inicio)
-            or not iniciais(trecho)
-        ):
-            continue
-        partes += [texto[ultimo : entidade.inicio], iniciais(trecho)]
+    for entidade in escolhidas:
+        partes += [texto[ultimo : entidade.inicio], iniciais(texto[entidade.inicio : entidade.fim])]
         ultimo = entidade.fim
-        substituicoes += 1
     partes.append(texto[ultimo:])
-    return "".join(partes), substituicoes
+    return "".join(partes), len(escolhidas)
