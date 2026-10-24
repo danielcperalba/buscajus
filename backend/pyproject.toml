@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
+buscajus = "buscajus.cli:main"
 buscajus-worker = "buscajus.worker:main"
 
 [dependency-groups]
