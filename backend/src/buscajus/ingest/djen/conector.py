@@ -38,6 +38,7 @@ from buscajus.ingest.conector import (
 )
 from buscajus.ingest.djen import caderno
 from buscajus.ingest.djen.campos import LISTA_BRANCA, tipo_aceito
+from buscajus.ingest.djen.normalizacao import normalizar
 from buscajus.ingest.http import ClienteHttp
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ def hoje_sao_paulo() -> date:
 class ConectorDjen:
     fonte: Fonte = "djen"
     lista_branca = LISTA_BRANCA
+    normalizar = staticmethod(normalizar)
 
     def __init__(
         self,

@@ -4,7 +4,7 @@ Campos aninhados usam ``__`` como separador, por exemplo
 ``BUSCAJUS_DJEN__TRIBUNAIS='["TJPR"]'``. Ver ``.env.example`` na raiz do repositório.
 """
 
-from datetime import date
+from datetime import date, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
@@ -83,6 +83,24 @@ class ConfigTjdft(BaseModel):
     requisicoes_por_segundo: float = Field(default=1.0, gt=0)
 
 
+class ConfigAnonimizacao(BaseModel):
+    # Modelo local de NER de pessoas (camada 2), escolhido no F1-36. Vazio: o pipeline do
+    # DJEN não é criado e nenhum dado real é processado.
+    modelo_ner: str | None = None
+
+
+class ConfigAgendador(BaseModel):
+    # Desligado até decidir onde os dados reais ficam (a coleta precisa rodar no Brasil).
+    ativo: bool = False
+    # Horário (America/Sao_Paulo) a partir do qual o caderno do dia é coletado.
+    horario_djen: time = time(9, 0)
+    # Dias anteriores revisitados na coleta diária (cadernos publicados com atraso).
+    dias_retroativos: int = Field(default=3, ge=0)
+    # Janela da checagem de versões dos cadernos (F1-16).
+    dias_verificacao_versao: int = Field(default=30, ge=1)
+    intervalo_segundos: float = Field(default=60, gt=0)
+
+
 class Config(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="BUSCAJUS_",
@@ -99,6 +117,8 @@ class Config(BaseSettings):
     diretorio_modelos: Path = Path("data/modelos")
 
     http: ConfigHttp = ConfigHttp()
+    anonimizacao: ConfigAnonimizacao = ConfigAnonimizacao()
+    agendador: ConfigAgendador = ConfigAgendador()
     djen: ConfigDjen = ConfigDjen()
     tjdft: ConfigTjdft = ConfigTjdft()
 

@@ -60,10 +60,23 @@ Migrações fora do compose: `uv run alembic upgrade head` (usa `BUSCAJUS_DATABA
 ### Ingestão
 
 ```bash
+# Coleta os cadernos do DJEN de um período (do mais recente ao mais antigo); --forcar refaz os concluídos
+uv run buscajus ingest djen --tribunal TJPR --de 2026-10-01 --ate 2026-10-15 [--forcar]
+
+# Refaz parser, PII residual e upsert a partir do bruto filtrado, sem rede
+uv run buscajus ingest reprocessar --fonte djen [--tribunal TJPR] --de 2026-10-01 --ate 2026-10-15
+
+# Confere a versão dos cadernos recentes e reprocessa os que mudaram (checagem pontual dos ausentes)
+uv run buscajus ingest verificar-versoes --tribunal TJPR [--dias 30]
+
+# Estado e contagens de cada unidade de coleta
 uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]
 ```
 
-Mostra o estado de cada unidade de coleta (caderno do DJEN ou janela paginada) com as contagens de comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro.
+- **A coleta do DJEN exige o modelo de NER** (`BUSCAJUS_ANONIMIZACAO__MODELO_NER`, camada 2 da anonimização, F1-36/F1-37). Sem ele, `ingest djen` e `verificar-versoes` saem com código 2 antes de qualquer acesso à fonte.
+- A API do DJEN bloqueia IPs fora do Brasil: a coleta roda de uma máquina no Brasil.
+- O relatório de `status` traz comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro.
+- O agendador do `worker` (coleta diária e checagem de versões) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
 
 ### Frontend
 

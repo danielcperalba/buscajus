@@ -432,6 +432,8 @@ Para cada `AcordaoNormalizado`:
 
 Acórdãos cancelados **não são apagados** (rastreabilidade); apenas deixam de aparecer na busca e no detalhe (o detalhe responde 410 com aviso de cancelamento).
 
+Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha nova com `INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING` (corrida entre transações vira atualização); o snapshot do histórico é `to_jsonb` da linha sem `busca_tsv`. `removido` e `duplicado` não são desfeitos pela recoleta. O reprocessamento sem rede (`buscajus ingest reprocessar`) relê o bruto da versão corrente do caderno e refaz normalização, PII e upsert; a camada 1 não pode ser refeita daí, porque os destinatários nunca são gravados.
+
 ---
 
 ## 5. Normalização e limpeza
@@ -774,6 +776,8 @@ Item de resultado:
 | `api` | Python 3.12 slim + torch CPU | Carrega o modelo de embedding (~1–2 GB de RAM para e5-base) |
 | `worker` | mesma imagem da `api` | Agendador interno (caderno diário, checagem de versões, TJDFT) + job de embeddings; carrega também o modelo de NER |
 | `web` | Node 20 | Next.js |
+
+**Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` uma coleta diária por tribunal do DJEN a partir do horário configurado (padrão 9h, America/Sao_Paulo) e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. A coleta diária revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
 
 Volumes: `pgdata`, `raw` (brutos filtrados), `models` (cache de pesos do Hugging Face). Área temporária `tmp-cadernos` montada como **tmpfs** no `worker`, dimensionada para o maior caderno esperado com folga (um caderno por vez; ~57 MB no TJPR), não persistida e fora de backup.
 
