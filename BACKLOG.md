@@ -72,7 +72,7 @@ Convenções:
   - amostra estratificada (~50% câmaras criminais, ~25% família, ~25% cível);
   - ambiente local restrito aos anotadores, disco criptografado, fora do repositório e do CI (`ner-avaliacao-privado/` no `.gitignore`);
   - nada enviado a serviços de anotação ou APIs de IA de terceiros, e pré-anotação só com modelo local;
-  - data de exclusão fixada na abertura da issue.
+  - data de exclusão fixada na abertura da issue: **15/12/2026** ([issue #6](https://github.com/danielcperalba/buscajus/issues/6)).
 
   Comparar modelos locais (treinados no LeNER-Br; spaCy `pt_core_news_lg`) e definir meta de recall, limiar e lista de exceções. Ferramentas: `backend/scripts/ner_amostragem.py` (roda na máquina do anotador), `backend/scripts/ner_avaliacao.py` (pré-anotação local, validação e relatório só com agregados) e o guia [docs/ner-anotacao.md](docs/ner-anotacao.md). **Pronto quando:** relatório em `docs/avaliacao-ner.md` só com métricas agregadas e a decisão (sem nenhum trecho de ementa), e modelo fixado. *Depende de:* F1-35, F1-14.
 - **F1-37 [em andamento: interface `DetectorPessoas` e exceções prontas; falta o modelo, que depende de F1-36]** — Camada 2: NER de pessoas. Substitui por iniciais as entidades `PESSOA` detectadas, exceto relator, magistrados em citações de precedentes (`Rel.`, `Min.`, `Des.`) e epônimos da lista curada. Componente reutilizável pelo TJDFT (F2-12). **Pronto quando:** testes com a fixture e meta de recall de F1-36 atingida no conjunto anotado. *Depende de:* F1-36.
