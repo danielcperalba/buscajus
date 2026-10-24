@@ -141,3 +141,28 @@ def test_0006_carrega_a_tpu(alembic: ConfigAlembic, engine: Engine) -> None:
     assert total == len(tpu.classes) > 800
     assert referencias == [tpu.data_referencia]
     assert nome == "Apelação Cível"
+
+
+def test_0007_colunas_do_tjdft(alembic: ConfigAlembic, engine: Engine) -> None:
+    def colunas() -> set[str]:
+        with engine.connect() as conexao:
+            return {
+                f"{t}.{c}"
+                for t, c in conexao.execute(
+                    text(
+                        "SELECT table_name, column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public'"
+                    )
+                )
+            }
+
+    novas = {
+        "acordao.relator_designado",
+        "acordao.relator_designado_chave",
+        "acordao.local_publicacao",
+        "coleta_janela.descartados_segredo",
+    }
+    command.upgrade(alembic, "0007")
+    assert novas <= colunas()
+    command.downgrade(alembic, "0006")
+    assert not novas & colunas()

@@ -253,6 +253,8 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 - **Base**: só são aceitos registros com `base = "acordaos"`; os demais são descartados (defesa em profundidade, mesmo com o filtro na requisição). `acordaos-tr` é **subbase**, não base: o filtro `base=acordaos-tr` retorna 0, e `subbase=acordaos-tr` retorna 258.371.
 - **Turma recursal**: identificada por `turmaRecursal = true` ou `subbase = "acordaos-tr"`, e gravada em `acordao.turma_recursal`. Não é critério de aceite.
 - `decisao` (dispositivo) é guardado em coluna separada e **não** entra no embedding no MVP; serve para exibição.
+- **Integridade da paginação** (F2-04): o conector lê todas as páginas do dia em memória (já filtradas e anonimizadas) e confere que os uuids únicos de todos os registros recebidos, inclusive os descartados, batem com `hits.value`, e que `hits.value` não mudou entre as páginas. Se divergir, relê o dia inteiro, até 3 vezes, e então marca a unidade como `erro`. Só depois da conferência os lotes seguem para o bruto e o banco; uma unidade retomada relê o dia inteiro e grava só as páginas depois do checkpoint.
+- **Segredo no relatório**: os registros em segredo são contados em `coleta_janela.descartados_segredo`; nenhum campo deles é gravado. O uuid fica só em memória, para retirar da busca um acórdão já indexado que passou a vir sob segredo (`removido`, motivo "segredo de justiça superveniente").
 
 **Estratégia de coleta**
 
@@ -332,6 +334,8 @@ CREATE TABLE acordao (
     classe_citacao           text,                   -- DJEN: classe do cabeçalho (usada na citação)
     relator                  text,                   -- forma de exibição
     relator_chave            text,                   -- normalizado p/ filtro (sem títulos/acentos, minúsculo)
+    relator_designado        text,                   -- TJDFT: nomeRelatorDesignado (citação: "Rel. p/ acórdão")
+    relator_designado_chave  text,
     turma_recursal           boolean,
     possui_inteiro_teor      boolean,
 
@@ -339,6 +343,7 @@ CREATE TABLE acordao (
     data_julgamento          date,                   -- TJDFT: dataJulgamento | DJEN: "Data do Julgamento" do cabeçalho
     data_publicacao          date,                   -- TJDFT: dataPublicacao | DJEN: nula (não é calculada)
     data_disponibilizacao    date,                   -- DJEN: data_disponibilizacao
+    local_publicacao         text,                   -- TJDFT: localDePublicacao ("DJE" ou "PJe"), para a citação
     data_referencia          date GENERATED ALWAYS AS
                              (coalesce(data_julgamento, data_publicacao, data_disponibilizacao)) STORED,
 
@@ -419,7 +424,7 @@ CREATE INDEX acordao_trecho_hnsw ON acordao_trecho
 | Tabela | Conteúdo |
 |---|---|
 | `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao` (lista dos `id` das comunicações recusadas pela falha segura, nunca o conteúdo), `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `iniciado_em`, `processado_em`. Único em `(tribunal, data)`. |
-| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
+| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (segredo de justiça e base diferente de `acordaos`), `descartados_segredo` (só a contagem dos que vieram sob segredo), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
 | `coleta_bruta` | Metadados de cada arquivo bruto **filtrado**: origem (`caderno_djen_id` ou `coleta_janela_id` + `pagina`), `caminho_arquivo`, `sha256`, `bytes`, `itens`, `recebida_em`, `versao_parser`. Arquivos em `data/raw/{fonte}/{tribunal}/…` (volume Docker). |
 | `acordao_historico` | Versões anteriores de um acórdão quando `hash_conteudo` muda: `acordao_id`, `versao`, `snapshot` (jsonb dos campos normalizados), `substituido_em`. |
 | `classe_cnj` | `codigo`, `nome`, `codigo_pai`, `sigla`, `ativa`, `tpu_referencia`, carregada da TPU/CNJ pela migração 0006 a partir de `buscajus/db/dados/tpu_classes.json` (arquivo versionado com a data de referência, gerado por `backend/scripts/atualizar_tpu.py`; sem o glossário e sem os campos de auditoria, que identificam servidores do CNJ). Classes que saem da TPU não são apagadas. |
@@ -712,14 +717,15 @@ Gerada no backend (fonte única da regra) e devolvida em cada resultado no campo
 
 ```
 DJEN:  {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator}[, j. {dd/mm/aaaa}], DJEN de {dd/mm/aaaa}.
-TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator}[, j. {dd/mm/aaaa}][, publ. {dd/mm/aaaa}].
+TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator} | Rel. p/ acórdão {designado}[, j. {dd/mm/aaaa}][, publ. {local} {dd/mm/aaaa}].
 ```
 
 **Exemplos**
 
 - TJPR (DJEN): *TJPR, 3ª Turma Recursal dos Juizados Especiais, Recurso Inominado nº 0011412-20.2025.8.16.0069, Rel. Fulano de Tal, j. 06/10/2026, DJEN de 14/10/2026.*
 - TJPR sem data de julgamento: *TJPR, 3ª Turma Recursal dos Juizados Especiais, Recurso Inominado nº 0011412-20.2025.8.16.0069, Rel. Fulano de Tal, DJEN de 14/10/2026.*
-- TJDFT: *TJDFT, 3ª Turma Cível, Apelação Cível nº 0701234-56.2023.8.07.0001, Rel. Des. Fulano de Tal, j. 08/10/2026, publ. 15/10/2026.*
+- TJDFT: *TJDFT, 3ª Turma Cível, Apelação Cível nº 0701234-56.2023.8.07.0001, Rel. Fulano de Tal, j. 08/10/2026, publ. PJe 21/10/2026.*
+- TJDFT com relator designado: *TJDFT, 1ª Câmara Criminal, Apelação Criminal nº 0701234-56.2023.8.07.0001, Rel. p/ acórdão Beltrana de Tal, j. 02/10/2026, publ. DJE 14/10/2026.*
 
 **Regras**
 
@@ -729,6 +735,9 @@ TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel.
 - Partes ausentes são omitidas junto com o separador (nunca "Rel. null").
 - Datas em `dd/mm/aaaa`; número sempre com máscara; classe por extenso.
 - `{classe}` é `classe_citacao`: no DJEN, a classe entre parênteses na célula "Processo" do cabeçalho do acórdão, que é a classe do recurso julgado; `nomeClasse` difere dela em 44% das ementas do TJPR (F1-01) e fica em `classe_nome`, só para filtros. Sem `classe_citacao`, usa `classe_nome`.
+- TJDFT: `{classe}` é `classe_citacao`, o nome da classe resolvido pela TPU (`classe_cnj`) a partir de `codigoClasseCnj`. A API traz o relator sem título (em maiúsculas, convertido para *title case*), então a citação não acrescenta `Des.`/`Juiz`.
+- TJDFT com `nomeRelatorDesignado` (relator original vencido): `Rel. p/ acórdão {designado}` no lugar de `Rel. {relator}`. Os dois ficam guardados (`relator` e `relator_designado`).
+- TJDFT: `j.` com `dataJulgamento` e `publ. {local} {data}` com `localDePublicacao` (`DJE` ou `PJe`) e `dataPublicacao`, ambas convertidas de UTC para America/Sao_Paulo. Sem local, só `publ. {data}`.
 - O frontend copia a string exatamente como veio da API.
 
 ---

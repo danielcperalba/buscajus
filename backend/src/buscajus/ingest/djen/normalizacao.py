@@ -20,9 +20,8 @@ from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from buscajus.core.erros import ErroSeguro
 from buscajus.ingest.djen.parser import analisar, processo_confere
-from buscajus.ingest.modelos import AcordaoNormalizado
+from buscajus.ingest.modelos import AcordaoNormalizado, ItemInvalido
 from buscajus.ingest.processo import normalizar_numero
 from buscajus.ingest.relator import normalizar_relator
 from buscajus.ingest.texto import chave, decodificar
@@ -33,8 +32,7 @@ URL_CERTIDAO = "https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certida
 FUSO = ZoneInfo("America/Sao_Paulo")
 
 
-class ItemInvalido(ErroSeguro):
-    """Item do bruto sem os campos mínimos; contado como falha de parser."""
+__all__ = ["ItemInvalido", "normalizar"]
 
 
 def _texto_curto(valor: Any) -> str | None:

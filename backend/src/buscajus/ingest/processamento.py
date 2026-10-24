@@ -7,9 +7,8 @@ from sqlalchemy import Connection
 
 from buscajus.ingest.conector import Contadores, LoteBruto
 from buscajus.ingest.djen.campos import EstadoFonte
-from buscajus.ingest.djen.normalizacao import ItemInvalido
 from buscajus.ingest.djen.parser import FalhaParser
-from buscajus.ingest.modelos import AcordaoNormalizado
+from buscajus.ingest.modelos import AcordaoNormalizado, ItemInvalido
 from buscajus.ingest.pii import verificar_pii
 from buscajus.ingest.processo import NumeroProcessoInvalido
 from buscajus.ingest.upsert import Resultado, upsert
