@@ -5,12 +5,15 @@ com a lista branca aplicada. Estado, gravação do bruto e processamento ficam c
 orquestrador (``ingest.runner``), que é o mesmo para todas as fontes.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from buscajus.core.erros import ErroSeguro
+
+if TYPE_CHECKING:
+    from buscajus.ingest.modelos import AcordaoNormalizado
 
 Fonte = Literal["djen", "tjdft"]
 
@@ -110,3 +113,9 @@ class Conector(Protocol):
     def coletar(self, unidade: UnidadeColeta, checkpoint: Checkpoint) -> Iterator[LoteBruto]:
         """Lotes da unidade. Unidades paginadas começam em ``checkpoint.proxima_pagina``."""
         ...
+
+
+class ConectorNormalizador(Conector, Protocol):
+    """Conector que também sabe transformar um item do bruto em ``AcordaoNormalizado``."""
+
+    def normalizar(self, item: Mapping[str, Any]) -> "AcordaoNormalizado": ...
