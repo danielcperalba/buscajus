@@ -118,15 +118,18 @@ def _item(
     tipo_documento: str,
     tipo_comunicacao: str,
     orgao: str,
-    id_orgao: int,
     classe: str,
     codigo_classe: int,
     texto: str,
     destinatarios: tuple[dados.Pessoa, ...],
     advogados: tuple[dados.Advogado, ...],
     cancelada: bool,
+    nome_classe: str | None = None,
+    sem_link: bool = False,
 ) -> dict[str, Any]:
-    digitos, mascara = numero_cnj(sequencial)
+    # Formato dos cadernos recentes (F1-01): sem numeroprocessocommascara, meiocompleto e
+    # idOrgao; link pode ser nulo.
+    digitos, _ = numero_cnj(sequencial)
     ano, mes, dia = data.split("-")
     return {
         "id": id_comunicacao,
@@ -134,24 +137,24 @@ def _item(
         "siglaTribunal": dados.TRIBUNAL,
         "tipoComunicacao": tipo_comunicacao,
         "nomeOrgao": orgao,
-        "idOrgao": id_orgao,
         "texto": texto,
         "numero_processo": digitos,
         "meio": "D",
-        "link": f"https://tribunal.exemplo.invalid/consulta/documento/{id_comunicacao}",
+        "link": None
+        if sem_link
+        else f"https://tribunal.exemplo.invalid/consulta/documento/{id_comunicacao}",
         "tipoDocumento": tipo_documento,
-        "nomeClasse": classe,
+        "nomeClasse": nome_classe or classe,
         "codigoClasse": str(codigo_classe),
         "numeroComunicacao": id_comunicacao % 100000,
         "ativo": not cancelada,
         "hash": hash_comunicacao(id_comunicacao),
-        "status": "C" if cancelada else "P",
+        # "C" nunca foi observado (F1-01): o cancelamento vem de ativo e data_cancelamento.
+        "status": "P",
         "motivo_cancelamento": "Cancelamento solicitado pelo órgão" if cancelada else None,
         "data_cancelamento": f"2026-10-16T09:30:00{FUSO}" if cancelada else None,
         "datadisponibilizacao": f"{dia}/{mes}/{ano}",
         "dataenvio": f"{int(dia) - 1:02d}/{mes}/{ano}",
-        "meiocompleto": "Diário de Justiça Eletrônico Nacional",
-        "numeroprocessocommascara": mascara,
         "destinatarios": _destinatarios(id_comunicacao, destinatarios),
         "destinatarioadvogados": _advogados(id_comunicacao, advogados),
     }
@@ -167,13 +170,14 @@ def item_ementa(
         tipo_documento="Ementa de Acórdão",
         tipo_comunicacao="Intimação",
         orgao=e.orgao,
-        id_orgao=e.id_orgao,
         classe=e.classe,
         codigo_classe=e.codigo_classe,
         texto=texto_ementa(e),
         destinatarios=e.destinatarios,
         advogados=e.advogados,
         cancelada=e.cancelada if cancelada is None else cancelada,
+        nome_classe=e.nome_classe_fonte,
+        sem_link=e.sem_link,
     )
 
 
@@ -185,7 +189,6 @@ def item_outra(o: dados.Outra, data: str = dados.DATA) -> dict[str, Any]:
         tipo_documento=o.tipo_documento,
         tipo_comunicacao=o.tipo_comunicacao,
         orgao=o.orgao,
-        id_orgao=o.id_orgao,
         classe=o.classe,
         codigo_classe=o.codigo_classe,
         texto=entidades(o.texto),

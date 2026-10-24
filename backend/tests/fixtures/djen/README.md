@@ -41,6 +41,6 @@ O dia sem caderno não tem arquivo: a API responde 404.
 
 As comunicações que não são ementa usam nomes com o prefixo `DESCART` (em maiúsculas), no texto e nos destinatários, e não podem aparecer em nenhuma tabela, arquivo bruto ou log.
 
-## Suposições a confirmar no F1-01
+## Formato (confirmado no F1-01)
 
-O formato segue o que já foi observado nos cadernos reais (seção 3.2 do ARCHITECTURE.md). Estes detalhes ainda são suposições e serão conferidos quando o script do F1-01 rodar: os valores de `status` de uma comunicação ativa e de uma cancelada (`"P"` e `"C"` aqui), o tipo de `codigoClasse` e `idOrgao`, os campos extras dos metadados e o HTML exato das células (`<strong>`, `&nbsp;`, ementa na própria célula `colspan=2` depois de `<br>`).
+Os itens seguem os cadernos recentes do TJPR: sem `numeroprocessocommascara`, `meiocompleto` e `idOrgao`; com `dataenvio`; `status = "P"` em todos (os cancelados vêm com `ativo = false` e `data_cancelamento`, porque nenhum valor de `status` de cancelamento foi observado). A ementa 900012 tem `link` nulo; 900001 e 900005 têm `nomeClasse` diferente da classe do cabeçalho, como em 44% das ementas reais.

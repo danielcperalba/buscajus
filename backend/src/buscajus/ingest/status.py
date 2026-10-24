@@ -16,6 +16,7 @@ COLUNAS_CADERNOS = (
     ("rejeitados", "REJ. ANONIM."),
     ("quarentena", "QUARENTENA"),
     ("cancelados", "CANCELADOS"),
+    ("anomalias", "ANOMALIAS"),
     ("falhas_parser", "FALHAS PARSER"),
     ("respostas_429", "429"),
     ("tentativas", "TENTATIVAS"),
@@ -34,6 +35,7 @@ COLUNAS_JANELAS = (
     ("rejeitados", "REJ. ANONIM."),
     ("quarentena", "QUARENTENA"),
     ("cancelados", "CANCELADOS"),
+    ("anomalias", "ANOMALIAS"),
     ("falhas_parser", "FALHAS PARSER"),
     ("respostas_429", "429"),
     ("tentativas", "TENTATIVAS"),
@@ -49,6 +51,7 @@ _SOMAVEIS = {
     "rejeitados",
     "quarentena",
     "cancelados",
+    "anomalias",
     "falhas_parser",
     "respostas_429",
 }
@@ -83,7 +86,7 @@ def listar_cadernos(
         text(f"""
             SELECT tribunal, data, status, versao, comunicacoes_lidas, acordaos_aceitos,
                 cardinality(rejeitados_anonimizacao) AS rejeitados, quarentena, cancelados,
-                falhas_parser, respostas_429, tentativas, ultimo_erro
+                anomalias, falhas_parser, respostas_429, tentativas, ultimo_erro
             FROM caderno_djen WHERE {onde}
             ORDER BY tribunal, data DESC
         """),  # noqa: S608 (interpola só constantes do módulo)
@@ -109,7 +112,7 @@ def listar_janelas(
             SELECT fonte::text AS fonte, tribunal, data_inicio, data_fim, status, ultima_pagina,
                 itens_recebidos, itens_aceitos, itens_descartados,
                 cardinality(rejeitados_anonimizacao) AS rejeitados, quarentena, cancelados,
-                falhas_parser, respostas_429, tentativas, ultimo_erro
+                anomalias, falhas_parser, respostas_429, tentativas, ultimo_erro
             FROM coleta_janela WHERE {onde}
             ORDER BY fonte, tribunal, data_inicio DESC
         """),  # noqa: S608 (interpola só constantes do módulo)

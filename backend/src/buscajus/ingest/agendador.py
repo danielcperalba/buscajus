@@ -19,6 +19,7 @@ from sqlalchemy import Engine, text
 
 from buscajus.core.config import Config
 from buscajus.core.erros import descrever_erro
+from buscajus.ingest.djen import fabrica
 from buscajus.ingest.djen.fabrica import criar_coleta
 from buscajus.ingest.djen.versoes import verificar_versoes
 
@@ -135,7 +136,7 @@ def coleta_djen_diaria(config: Config, engine: Engine) -> Executor:
                 coleta.cliente,
                 coleta.bruto,
                 url_api=config.djen.url_api,
-                status_cancelamento=config.djen.status_cancelamento,
+                regra=fabrica.regra_estado(config),
                 tribunal=tribunal,
                 hoje=hoje,
                 dias=config.agendador.dias_verificacao_versao,

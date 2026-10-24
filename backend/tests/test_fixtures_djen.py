@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from fixtures.djen import PASTA, arquivos, dados
+from fixtures.djen import PASTA, arquivos, dados, numero_cnj
 
 TIPO_EMENTA = "Ementa de Acórdão"
 
@@ -66,7 +66,17 @@ def test_tipo_documento_vem_escapado_no_json() -> None:
 
 def test_processos_ficticios(caderno: list[dict[str, Any]]) -> None:
     for item in caderno:
-        assert re.fullmatch(r"\d{7}-\d{2}\.2099\.8\.16\.9999", item["numeroprocessocommascara"])
+        assert re.fullmatch(r"\d{7}\d{2}2099816\d{4}", item["numero_processo"])
+        assert item["numero_processo"].endswith("9999")
+
+
+def test_formato_dos_cadernos_recentes(caderno: list[dict[str, Any]]) -> None:
+    """F1-01: sem numeroprocessocommascara, meiocompleto e idOrgao; com dataenvio."""
+    for item in caderno:
+        assert not {"numeroprocessocommascara", "meiocompleto", "idOrgao"} & set(item)
+        assert "dataenvio" in item
+        assert item["status"] == "P"
+    assert any(item["link"] is None for item in caderno)
 
 
 def test_segunda_versao(caderno: list[dict[str, Any]]) -> None:
@@ -141,7 +151,7 @@ def test_script_do_spike_so_imprime_agregados(caderno: list[dict[str, Any]]) -> 
     assert dados.MARCADOR_DESCARTADO not in normalizado
     for item in caderno:
         assert item["numero_processo"] not in texto
-        assert item["numeroprocessocommascara"] not in texto
+        assert numero_cnj(int(item["numero_processo"][:7]))[1] not in texto
         assert item["hash"] not in texto
     for relator in dados.RELATORES:
         assert normalizar(relator) not in normalizado

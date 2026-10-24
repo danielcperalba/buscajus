@@ -59,9 +59,10 @@ services:
       - raw:/dados/raw
       - modelos:/dados/modelos
     # Cadernos do DJEN contêm nomes de partes: ficam só em memória, nunca em volume
-    # persistente nem em backup (ARCHITECTURE.md, seção 6.2).
+    # persistente nem em backup (ARCHITECTURE.md, seção 6.2). O tmpfs só ocupa RAM com o ZIP
+    # em uso; maior caderno do TJPR visto no F1-01: 163 MB; limite do download: 1 GB.
     tmpfs:
-      - /tmp-cadernos:size=256m,mode=0700,uid=10001
+      - /tmp-cadernos:size=1100m,mode=0700,uid=10001
     depends_on:
       migracoes:
         condition: service_completed_successfully

@@ -105,3 +105,23 @@ def test_busca_tsv_e_data_referencia_sao_geradas(alembic: ConfigAlembic, engine:
         ).one()
     assert str(linha[0]) == "2026-10-14"
     assert linha[1] is True
+
+
+def test_0005_anomalias_e_classe_citacao(alembic: ConfigAlembic, engine: Engine) -> None:
+    def colunas() -> set[str]:
+        with engine.connect() as conexao:
+            return {
+                f"{t}.{c}"
+                for t, c in conexao.execute(
+                    text(
+                        "SELECT table_name, column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public'"
+                    )
+                )
+            }
+
+    novas = {"caderno_djen.anomalias", "coleta_janela.anomalias", "acordao.classe_citacao"}
+    command.upgrade(alembic, "0005")
+    assert novas <= colunas()
+    command.downgrade(alembic, "0004")
+    assert not novas & colunas()

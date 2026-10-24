@@ -48,6 +48,10 @@ class Ementa:
     cancelada: bool = False
     escape_duplo: bool = False  # entidades do corpo escapadas duas vezes (&amp;Atilde;)
     entidades_numericas: bool = False  # &#227; em vez de &atilde;
+    # nomeClasse do JSON, quando difere da classe do cabeçalho (44% no TJPR, F1-01).
+    nome_classe_fonte: str | None = None
+    # link nulo (1.180 comunicações no F1-01).
+    sem_link: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,7 @@ EMENTAS: tuple[Ementa, ...] = (
         ),
         destinatarios=(MP, Pessoa("ANACLETO BORGONOVI QUINTELA")),
         advogados=(ADV_DEFESA,),
+        nome_classe_fonte="Ação Penal - Procedimento Ordinário",
     ),
     Ementa(
         id=900002,
@@ -185,6 +190,7 @@ EMENTAS: tuple[Ementa, ...] = (
             Pessoa("TEREZINHA APARECIDA MOSCARDINI", "A"),
         ),
         advogados=(ADV_CIVEL,),
+        nome_classe_fonte="Procedimento do Juizado Especial Cível",
     ),
     Ementa(
         id=900006,
@@ -339,6 +345,7 @@ EMENTAS: tuple[Ementa, ...] = (
             Pessoa("DORIVAL ESPIGÃO MARTINELLO", "A"),
         ),
         entidades_numericas=True,
+        sem_link=True,
     ),
     Ementa(
         id=900013,

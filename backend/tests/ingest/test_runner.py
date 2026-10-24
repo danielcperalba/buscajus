@@ -179,7 +179,7 @@ def test_processador_roda_na_transacao_do_lote(banco: Engine, tmp_path: Path) ->
             text("SELECT itens FROM coleta_bruta WHERE id = :id"), {"id": coleta_bruta_id}
         ) == len(lote.itens)
         vistos.append(coleta_bruta_id)
-        return Contadores(quarentena=1, falhas_parser=2, cancelados=3)
+        return Contadores(quarentena=1, falhas_parser=2, cancelados=3, anomalias=4)
 
     conector = ConectorFalso(paginada=False)
     _orquestrador(banco, conector, tmp_path, processar=processar).executar(
@@ -187,6 +187,7 @@ def test_processador_roda_na_transacao_do_lote(banco: Engine, tmp_path: Path) ->
     )
     caderno = _linha(banco, "SELECT * FROM caderno_djen")
     assert (caderno.quarentena, caderno.falhas_parser, caderno.cancelados) == (1, 2, 3)
+    assert caderno.anomalias == 4
     assert len(vistos) == 1
 
 

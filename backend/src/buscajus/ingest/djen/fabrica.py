@@ -5,7 +5,6 @@ Falha fechada: sem modelo de NER configurado, :func:`criar_coleta` levanta
 """
 
 from dataclasses import dataclass
-from functools import partial
 
 from sqlalchemy import Engine
 
@@ -14,7 +13,7 @@ from buscajus.ingest.anonimizacao import Anonimizador
 from buscajus.ingest.anonimizacao.modelo_ner import carregar_detector
 from buscajus.ingest.anonimizacao.pipeline import criar_anonimizador
 from buscajus.ingest.bruto import ArmazenamentoBruto
-from buscajus.ingest.djen.campos import comunicacao_cancelada
+from buscajus.ingest.djen.campos import RegraEstado
 from buscajus.ingest.djen.conector import ConectorDjen
 from buscajus.ingest.djen.normalizacao import normalizar
 from buscajus.ingest.djen.parser import VERSAO_PARSER
@@ -35,10 +34,14 @@ class ColetaDjen:
         self.cliente.fechar()
 
 
+def regra_estado(config: Config) -> RegraEstado:
+    return RegraEstado.de(config.djen.status_ativos, config.djen.status_cancelamento)
+
+
 def processador(config: Config) -> ProcessadorAcordaos:
     return ProcessadorAcordaos(
         normalizar,
-        partial(comunicacao_cancelada, status_cancelamento=config.djen.status_cancelamento),
+        regra_estado(config).classificar,
     )
 
 

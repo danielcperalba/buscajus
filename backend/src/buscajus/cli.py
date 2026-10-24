@@ -98,6 +98,7 @@ def _djen(args: argparse.Namespace) -> int:
                 "falhas_parser": r.contadores.falhas_parser,
                 "quarentena": r.contadores.quarentena,
                 "cancelados": r.contadores.cancelados,
+                "anomalias": r.contadores.anomalias,
                 "erro": r.erro,
             }
             for r in resumos
@@ -127,6 +128,7 @@ def _reprocessar(args: argparse.Namespace) -> int:
                 "quarentena": r.contadores.quarentena,
                 "cancelados": r.contadores.cancelados,
                 "bloqueados": r.contadores.bloqueados,
+                "anomalias": r.contadores.anomalias,
             }
             for r in resultados
         ]
@@ -144,7 +146,7 @@ def _verificar_versoes(args: argparse.Namespace) -> int:
             coleta.cliente,
             coleta.bruto,
             url_api=config.djen.url_api,
-            status_cancelamento=config.djen.status_cancelamento,
+            regra=fabrica.regra_estado(config),
             tribunal=args.tribunal.upper(),
             hoje=hoje_sao_paulo(),
             dias=args.dias,

@@ -177,6 +177,7 @@ class Orquestrador:
             "falhas_parser": c.falhas_parser,
             "quarentena": c.quarentena,
             "cancelados": c.cancelados,
+            "anomalias": c.anomalias,
         }
         if resumo.resultado is Resultado.ERRO:
             log.error("unidade com erro", extra=extra | {"erro": resumo.erro})

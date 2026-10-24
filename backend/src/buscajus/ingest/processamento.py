@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import Connection
 
 from buscajus.ingest.conector import Contadores, LoteBruto
+from buscajus.ingest.djen.campos import EstadoFonte
 from buscajus.ingest.djen.normalizacao import ItemInvalido
 from buscajus.ingest.djen.parser import FalhaParser
 from buscajus.ingest.modelos import AcordaoNormalizado
@@ -20,10 +21,10 @@ class ProcessadorAcordaos:
     def __init__(
         self,
         normalizar: Callable[[Mapping[str, Any]], AcordaoNormalizado],
-        cancelado: Callable[[Mapping[str, Any]], bool],
+        estado: Callable[[Mapping[str, Any]], EstadoFonte],
     ) -> None:
         self._normalizar = normalizar
-        self._cancelado = cancelado
+        self._estado = estado
 
     def __call__(self, conexao: Connection, lote: LoteBruto, coleta_bruta_id: int) -> Contadores:
         return self.processar_itens(conexao, lote.itens, coleta_bruta_id)
@@ -39,7 +40,9 @@ class ProcessadorAcordaos:
                 # O item continua no bruto filtrado, para depurar e reprocessar.
                 contadores.falhas_parser += 1
                 continue
-            cancelado = self._cancelado(item)
+            estado = self._estado(item)
+            cancelado = estado is EstadoFonte.CANCELADA
+            anomalia = estado is EstadoFonte.ANOMALA
             motivos = verificar_pii(acordao.ementa)
             resultado = upsert(
                 conexao,
@@ -47,11 +50,14 @@ class ProcessadorAcordaos:
                 coleta_bruta_id=coleta_bruta_id,
                 cancelado=cancelado,
                 motivos_pii=motivos,
+                anomalia=anomalia,
             )
             if resultado is Resultado.BLOQUEADO:
                 contadores.bloqueados += 1
             elif cancelado:
                 contadores.cancelados += 1
+            elif anomalia:
+                contadores.anomalias += 1
             elif motivos:
                 contadores.quarentena += 1
         return contadores

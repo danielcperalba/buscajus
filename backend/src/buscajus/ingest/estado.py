@@ -56,6 +56,7 @@ def _contadores(lote: LoteBruto) -> dict[str, Any]:
         "quarentena": c.quarentena,
         "cancelados": c.cancelados,
         "bloqueados": c.bloqueados,
+        "anomalias": c.anomalias,
         "total_fonte": lote.total_fonte,
     }
 
@@ -65,7 +66,8 @@ class RepositorioCadernos:
 
     _ZERAR = """
         comunicacoes_lidas = 0, acordaos_aceitos = 0, rejeitados_anonimizacao = '{}',
-        falhas_parser = 0, quarentena = 0, cancelados = 0, bloqueados = 0, respostas_429 = 0
+        falhas_parser = 0, quarentena = 0, cancelados = 0, bloqueados = 0, anomalias = 0,
+        respostas_429 = 0
     """
 
     def obter(self, conexao: Connection, unidade: UnidadeColeta) -> EstadoUnidade | None:
@@ -110,6 +112,7 @@ class RepositorioCadernos:
                     quarentena = quarentena + :quarentena,
                     cancelados = cancelados + :cancelados,
                     bloqueados = bloqueados + :bloqueados,
+                    anomalias = anomalias + :anomalias,
                     total_fonte = coalesce(:total_fonte, total_fonte),
                     versao = coalesce(:versao, versao),
                     hash = coalesce(:hash, hash),
@@ -202,7 +205,7 @@ class RepositorioJanelas:
         zerar = """,
             ultima_pagina = NULL, total_fonte = NULL, itens_recebidos = 0, itens_aceitos = 0,
             itens_descartados = 0, rejeitados_anonimizacao = '{}', falhas_parser = 0,
-            quarentena = 0, cancelados = 0, bloqueados = 0, respostas_429 = 0
+            quarentena = 0, cancelados = 0, bloqueados = 0, anomalias = 0, respostas_429 = 0
         """
         linha = conexao.execute(
             text(f"""
@@ -235,6 +238,7 @@ class RepositorioJanelas:
                     quarentena = quarentena + :quarentena,
                     cancelados = cancelados + :cancelados,
                     bloqueados = bloqueados + :bloqueados,
+                    anomalias = anomalias + :anomalias,
                     total_fonte = coalesce(:total_fonte, total_fonte)
                 WHERE id = :id
             """),

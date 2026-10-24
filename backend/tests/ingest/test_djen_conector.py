@@ -23,7 +23,7 @@ from buscajus.ingest.conector import (
     UnidadeNaoPronta,
     UnidadeSemDados,
 )
-from buscajus.ingest.djen.campos import LISTA_BRANCA, comunicacao_cancelada, tipo_aceito
+from buscajus.ingest.djen.campos import LISTA_BRANCA, EstadoFonte, RegraEstado, tipo_aceito
 from buscajus.ingest.djen.conector import ConectorDjen
 from buscajus.ingest.http import ClienteHttp, RespostaGrandeDemais
 from buscajus.ingest.runner import Orquestrador, Resultado
@@ -91,15 +91,28 @@ def test_tipo_documento_comparado_depois_do_parse() -> None:
 @pytest.mark.parametrize(
     ("item", "esperado"),
     [
-        ({"ativo": True, "status": "P", "data_cancelamento": None}, False),
-        ({"ativo": False, "status": "P", "data_cancelamento": None}, True),
-        ({"ativo": True, "status": "P", "data_cancelamento": "2026-10-16T09:30:00"}, True),
-        ({"ativo": True, "status": "C", "data_cancelamento": None}, True),
-        ({"ativo": True, "status": "P", "data_cancelamento": ""}, False),
+        ({"ativo": True, "status": "P", "data_cancelamento": None}, EstadoFonte.ATIVA),
+        ({"ativo": True, "status": " P ", "data_cancelamento": ""}, EstadoFonte.ATIVA),
+        ({"ativo": False, "status": "P", "data_cancelamento": None}, EstadoFonte.CANCELADA),
+        (
+            {"ativo": True, "status": "P", "data_cancelamento": "2026-10-16T09:30:00"},
+            EstadoFonte.CANCELADA,
+        ),
+        # "C" não foi confirmado: sem configuração, é anomalia, não cancelamento.
+        ({"ativo": True, "status": "C", "data_cancelamento": None}, EstadoFonte.ANOMALA),
+        ({"ativo": True, "status": "X", "data_cancelamento": None}, EstadoFonte.ANOMALA),
+        ({"ativo": True, "status": None, "data_cancelamento": None}, EstadoFonte.ANOMALA),
+        ({"status": "P", "data_cancelamento": None}, EstadoFonte.ANOMALA),
+        ({"ativo": "true", "status": "P"}, EstadoFonte.ANOMALA),
     ],
 )
-def test_cancelamento(item: dict[str, Any], esperado: bool) -> None:
-    assert comunicacao_cancelada(item, ["C"]) is esperado
+def test_estado_da_fonte(item: dict[str, Any], esperado: EstadoFonte) -> None:
+    assert RegraEstado().classificar(item) is esperado
+
+
+def test_status_de_cancelamento_configurado() -> None:
+    regra = RegraEstado.de(["P"], ["C"])
+    assert regra.classificar({"ativo": True, "status": "C"}) is EstadoFonte.CANCELADA
 
 
 def test_lista_branca_nao_tem_dados_de_partes() -> None:
@@ -432,3 +445,28 @@ def test_area_temporaria_criada_com_permissao_restrita(tmp_path: Path) -> None:
     caminho = temporario.novo_arquivo(tmp_path / "nova", "TJPR")
     assert caminho.parent.stat().st_mode & 0o777 == 0o700
     assert not caminho.exists()
+
+
+@respx.mock
+def test_caderno_grande_gera_alerta_sem_url(
+    cliente: ClienteHttp,
+    anonimizador: AnonimizadorFalso,
+    tmp_cadernos: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    servir_caderno(respx.mock, DIA)
+    conector = _conector(cliente, anonimizador, tmp_cadernos, alerta_bytes_caderno=100)
+    with caplog.at_level(logging.WARNING):
+        (lote,) = list(conector.coletar(_unidade(), Checkpoint()))
+    assert lote.contadores.aceitos == 20  # o alerta não interrompe
+    (alerta,) = [
+        r for r in caplog.records if r.getMessage() == "caderno acima do tamanho de alerta"
+    ]
+    assert alerta.bytes == lote.caderno.bytes  # type: ignore[attr-defined,union-attr]
+    assert "s3.cnj" not in str(vars(alerta))
+
+
+def test_limites_padrao_do_caderno() -> None:
+    config = config_djen()
+    assert config.limite_bytes_caderno == 1024**3
+    assert config.alerta_bytes_caderno == 500 * 1024**2

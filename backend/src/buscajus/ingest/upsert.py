@@ -7,7 +7,8 @@ Para cada acórdão normalizado:
 2. Linha nova → ``INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING``.
 3. Mesmo ``hash_conteudo`` → só o estado (ativo, status, cancelamento, situação, coleta).
 4. Hash diferente → a versão atual vai para ``acordao_historico`` e ``versao += 1``.
-5. Situação: ``cancelado`` se a fonte indicar (F1-26), ``quarentena`` se houver PII residual,
+5. Situação: ``cancelado`` se a fonte indicar (F1-26), ``quarentena`` se o estado da fonte for
+   anômalo (falha fechada: não indexa sem tratar como cancelamento) ou houver PII residual,
    senão ``ativo``. ``removido`` e ``duplicado`` existentes não são desfeitos pela recoleta.
 
 Os trechos vetoriais (``acordao_trecho``, Fase 3) serão apagados aqui sempre que a situação
@@ -36,6 +37,7 @@ _COLUNAS_CONTEUDO = (
     "id_orgao_fonte",
     "classe_nome",
     "classe_codigo_cnj",
+    "classe_citacao",
     "relator",
     "relator_chave",
     "turma_recursal",
@@ -68,9 +70,16 @@ class Resultado(StrEnum):
     BLOQUEADO = "bloqueado"
 
 
-def situacao_coletada(cancelado: bool, motivos_pii: Sequence[str]) -> tuple[str, str | None]:
+MOTIVO_ANOMALIA = "estado da fonte não reconhecido"
+
+
+def situacao_coletada(
+    cancelado: bool, motivos_pii: Sequence[str], *, anomalia: bool = False
+) -> tuple[str, str | None]:
     if cancelado:
         return "cancelado", "cancelado na fonte"
+    if anomalia:
+        return "quarentena", MOTIVO_ANOMALIA
     if motivos_pii:
         return "quarentena", "PII residual: " + ", ".join(motivos_pii)
     return "ativo", None
@@ -102,6 +111,7 @@ def upsert(
     coleta_bruta_id: int | None,
     cancelado: bool,
     motivos_pii: Sequence[str] = (),
+    anomalia: bool = False,
 ) -> Resultado:
     chave = {"fonte": acordao.fonte, "id_fonte": acordao.id_fonte}
     if bloqueado(conexao, acordao):
@@ -116,7 +126,7 @@ def upsert(
         )
         return Resultado.BLOQUEADO
 
-    situacao, motivo = situacao_coletada(cancelado, motivos_pii)
+    situacao, motivo = situacao_coletada(cancelado, motivos_pii, anomalia=anomalia)
     valores = acordao.colunas() | {
         "situacao": situacao,
         "motivo_situacao": motivo,
@@ -151,6 +161,7 @@ def upsert(
             coleta_bruta_id=coleta_bruta_id,
             cancelado=cancelado,
             motivos_pii=motivos_pii,
+            anomalia=anomalia,
         )
 
     mudou = atual.hash_conteudo != acordao.hash_conteudo
@@ -188,13 +199,17 @@ def _valor(coluna: str) -> str:
     return f":{coluna}"
 
 
-def marcar_cancelado(conexao: Connection, acordao_id: int, motivo: str) -> None:
+def marcar_situacao(conexao: Connection, acordao_id: int, situacao: str, motivo: str) -> None:
     """Usado pela checagem pontual de acórdãos que sumiram numa nova versão do caderno."""
     conexao.execute(
         text("""
-            UPDATE acordao SET situacao = 'cancelado', motivo_situacao = :motivo,
-                atualizado_em = now()
+            UPDATE acordao SET situacao = CAST(:situacao AS situacao_acordao),
+                motivo_situacao = :motivo, atualizado_em = now()
             WHERE id = :id AND situacao NOT IN ('removido', 'duplicado')
         """),
-        {"id": acordao_id, "motivo": motivo},
+        {"id": acordao_id, "situacao": situacao, "motivo": motivo},
     )
+
+
+def marcar_cancelado(conexao: Connection, acordao_id: int, motivo: str) -> None:
+    marcar_situacao(conexao, acordao_id, "cancelado", motivo)

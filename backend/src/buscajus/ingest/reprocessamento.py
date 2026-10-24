@@ -57,6 +57,7 @@ def reprocessar_cadernos(
                 text("""
                     UPDATE caderno_djen SET falhas_parser = :falhas, quarentena = :quarentena,
                         cancelados = :cancelados, bloqueados = :bloqueados,
+                        anomalias = :anomalias,
                         versao_parser = :versao_parser
                     WHERE id = :id
                 """),
@@ -66,6 +67,7 @@ def reprocessar_cadernos(
                     "quarentena": contadores.quarentena,
                     "cancelados": contadores.cancelados,
                     "bloqueados": contadores.bloqueados,
+                    "anomalias": contadores.anomalias,
                     "versao_parser": versao_parser,
                 },
             )

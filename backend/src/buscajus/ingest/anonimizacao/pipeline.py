@@ -149,8 +149,12 @@ class AnonimizadorDjen:
     def __call__(self, item: Mapping[str, Any]) -> dict[str, Any] | Rejeicao:
         id_comunicacao = str(item.get("id"))
         texto = item.get("texto")
-        if not isinstance(texto, str) or not texto.strip():
-            return Rejeicao(id_comunicacao, "comunicação sem texto")
+        if texto is None or (isinstance(texto, str) and not texto.strip()):
+            # Sem texto não há o que anonimizar: segue (só com a lista branca) e vira falha
+            # de parser na normalização, sem derrubar o caderno.
+            return self._lista_branca(item, None, 0)
+        if not isinstance(texto, str):
+            return Rejeicao(id_comunicacao, "texto em formato inesperado")
         nomes = nomes_a_substituir(item)
         try:
             novo_texto, substituicoes = self.anonimizar_html(texto, nomes)
@@ -158,9 +162,14 @@ class AnonimizadorDjen:
             return Rejeicao(id_comunicacao, "HTML não pôde ser lido")
         if novo_texto is None:
             return Rejeicao(id_comunicacao, "nome de destinatário ou CPF restante no texto")
-        # Lista branca: só agora os destinatários deixam de existir.
+        return self._lista_branca(item, novo_texto, substituicoes)
+
+    def _lista_branca(
+        self, item: Mapping[str, Any], texto: str | None, substituicoes: int
+    ) -> dict[str, Any]:
+        # Só agora os destinatários deixam de existir.
         limpo = {campo: valor for campo, valor in item.items() if campo in LISTA_BRANCA}
-        limpo["texto"] = novo_texto
+        limpo["texto"] = texto
         limpo["anonimizacao_versao"] = self.versao
         limpo["anonimizacao_substituicoes"] = min(substituicoes, LIMITE_SUBSTITUICOES)
         return limpo

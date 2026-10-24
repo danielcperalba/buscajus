@@ -258,6 +258,15 @@ def test_html_continua_valido_e_sem_entidades_duplas(anonimizador: AnonimizadorD
     assert "I.G.T." in resultado["texto"]
 
 
-def test_texto_invalido_e_rejeitado(anonimizador: AnonimizadorDjen) -> None:
-    assert isinstance(anonimizador({"id": 1, "texto": None}), Rejeicao)
-    assert isinstance(anonimizador({"id": 1, "texto": ""}), Rejeicao)
+def test_texto_nulo_segue_sem_destinatarios(anonimizador: AnonimizadorDjen) -> None:
+    """Sem texto não há o que anonimizar: o item segue e vira falha de parser adiante."""
+    for texto in (None, "", "   "):
+        item = {"id": 1, "texto": texto, "destinatarios": [{"nome": "ANACLETO QUINTELA"}]}
+        resultado = anonimizador(item)
+        assert not isinstance(resultado, Rejeicao)
+        assert resultado["texto"] is None
+        assert "destinatarios" not in resultado
+
+
+def test_texto_em_formato_inesperado_e_rejeitado(anonimizador: AnonimizadorDjen) -> None:
+    assert isinstance(anonimizador({"id": 1, "texto": 123}), Rejeicao)

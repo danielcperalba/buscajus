@@ -6,7 +6,12 @@ Recebe um item do bruto filtrado (já anonimizado e com a lista branca aplicada)
   ``data_disponibilizacao``: do campo estruturado.
 - ``link_oficial``: certidão do CNJ (``/api/v1/comunicacao/{hash}/certidao``), sempre https;
   ``link_tribunal``: campo ``link``.
-- Na divergência entre o número do cabeçalho e o campo estruturado, prevalece o estruturado.
+- Número do processo: ``numero_processo`` (20 dígitos, presente em 100% no F1-01), mascarado
+  aqui; ``numeroprocessocommascara`` não existe nos cadernos recentes. O número da célula
+  "Processo" é conferido contra ``numero_processo``; na divergência, prevalece o estruturado.
+- Classe: ``classe_nome``/``classe_codigo_cnj`` de ``nomeClasse``/``codigoClasse`` (filtros);
+  ``classe_citacao`` da célula "Processo" (citação).
+- ``link`` e ``idOrgao`` podem faltar; ``texto`` nulo vira falha de parser.
 """
 
 import logging
@@ -76,9 +81,7 @@ def normalizar(item: Mapping[str, Any]) -> AcordaoNormalizado:
         raise ItemInvalido("item sem id ou hash")
 
     analisado = analisar(str(item.get("texto") or ""))
-    numero = normalizar_numero(
-        str(item.get("numero_processo") or item.get("numeroprocessocommascara") or "")
-    )
+    numero = normalizar_numero(str(item.get("numero_processo") or ""))
     if not processo_confere(analisado.processo, numero.digitos):
         log.warning("número do cabeçalho difere do campo estruturado", extra={"id_fonte": id_fonte})
 
@@ -97,6 +100,7 @@ def normalizar(item: Mapping[str, Any]) -> AcordaoNormalizado:
         orgao_julgador=orgao,
         id_orgao_fonte=_texto_curto(item.get("idOrgao")),
         classe_nome=_texto_curto(item.get("nomeClasse")) or analisado.classe,
+        classe_citacao=analisado.classe or _texto_curto(item.get("nomeClasse")),
         classe_codigo_cnj=_inteiro(item.get("codigoClasse")),
         relator=relator.exibicao if relator else None,
         relator_chave=relator.chave if relator else None,
