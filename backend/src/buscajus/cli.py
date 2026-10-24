@@ -8,6 +8,8 @@ Comandos:
 - ``buscajus ingest reprocessar --fonte djen [--tribunal T] --de AAAA-MM-DD --ate AAAA-MM-DD``
 - ``buscajus ingest verificar-versoes --tribunal T [--dias 30]``
 - ``buscajus ingest status [--fonte F] [--tribunal T] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]``
+- ``buscajus eval pool --consultas ARQ --saida ARQ.csv [--modelo NOME[@REVISAO]]... [--k 20]``
+- ``buscajus eval metricas --consultas ARQ --julgamentos ARQ.csv [--modelo NOME[@REVISAO]]...``
 
 As coletas do DJEN e do TJDFT exigem o modelo de NER configurado (camada 2 da anonimização);
 sem ele, o comando falha antes de qualquer acesso à fonte.
@@ -18,10 +20,25 @@ import json
 import sys
 from collections.abc import Sequence
 from datetime import date
+from pathlib import Path
 
 from buscajus.core.config import obter_config
 from buscajus.core.logging import configurar_logging
 from buscajus.db.engine import obter_engine
+from buscajus.embed.avaliacao import (
+    avaliar,
+    carregar_consultas,
+    exportar_pool,
+    gerar_pool,
+    importar_julgamentos,
+)
+from buscajus.embed.embedder import EmbedderSentenceTransformers
+from buscajus.embed.indice import (
+    BuscaTextoPostgres,
+    IndiceVetorialMemoria,
+    Sistema,
+    documentos_ativos,
+)
 from buscajus.ingest import status
 from buscajus.ingest.anonimizacao.pipeline import ErroAnonimizacao
 from buscajus.ingest.bruto import ArmazenamentoBruto
@@ -88,6 +105,25 @@ def _parser() -> argparse.ArgumentParser:
     st.add_argument("--de", type=_data)
     st.add_argument("--ate", type=_data)
     st.set_defaults(executar=_status)
+
+    avaliacao = comandos.add_parser("eval", help="avaliação da busca (F3-04)")
+    sub_eval = avaliacao.add_subparsers(dest="subcomando", required=True)
+    pool = sub_eval.add_parser("pool", help="exporta o pool top-k de cada sistema para julgamento")
+    pool.add_argument("--saida", type=Path, required=True)
+    pool.add_argument("--k", type=int, default=20)
+    pool.set_defaults(executar=_eval_pool)
+    metricas = sub_eval.add_parser("metricas", help="nDCG@10, Recall@50, MRR e latência")
+    metricas.add_argument("--julgamentos", type=Path, required=True)
+    metricas.set_defaults(executar=_eval_metricas)
+    for sub in (pool, metricas):
+        sub.add_argument("--consultas", type=Path, required=True)
+        sub.add_argument(
+            "--modelo",
+            action="append",
+            default=[],
+            help="NOME[@REVISAO]; repetível (padrão: embeddings.modelo da configuração)",
+        )
+        sub.add_argument("--limite", type=int, help="máximo de acórdãos no índice temporário")
     return parser
 
 
@@ -242,6 +278,53 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sistemas(args: argparse.Namespace) -> tuple[list[Sistema], dict[str, str]]:
+    """Índice temporário: um sistema vetorial por modelo, mais o full-text do Postgres."""
+    config = obter_config()
+    engine = obter_engine()
+    documentos = documentos_ativos(engine, args.limite)
+    padrao = config.embeddings.modelo
+    if padrao and config.embeddings.revisao:
+        padrao += f"@{config.embeddings.revisao}"
+    sistemas: list[Sistema] = []
+    for modelo in args.modelo or ([padrao] if padrao else []):
+        nome, _, revisao = modelo.partition("@")
+        embedder = EmbedderSentenceTransformers(
+            nome,
+            revisao=revisao or None,
+            dispositivo=config.embeddings.dispositivo,
+            tamanho_lote=config.embeddings.tamanho_lote,
+            diretorio_cache=str(config.diretorio_modelos),
+        )
+        sistemas.append(
+            IndiceVetorialMemoria(
+                embedder,
+                documentos,
+                tokens_por_trecho=config.embeddings.tokens_por_trecho,
+                sobreposicao=config.embeddings.sobreposicao_tokens,
+            )
+        )
+    sistemas.append(BuscaTextoPostgres(engine))
+    return sistemas, {d.id: d.texto for d in documentos}
+
+
+def _eval_pool(args: argparse.Namespace) -> int:
+    consultas = carregar_consultas(args.consultas)
+    sistemas, textos = _sistemas(args)
+    itens = gerar_pool(consultas, sistemas, args.k)
+    exportar_pool(itens, textos, args.saida)
+    _imprimir({"consultas": len(consultas), "itens": len(itens), "saida": str(args.saida)})
+    return 0
+
+
+def _eval_metricas(args: argparse.Namespace) -> int:
+    consultas = carregar_consultas(args.consultas)
+    julgamentos = importar_julgamentos(args.julgamentos)
+    sistemas, _ = _sistemas(args)
+    _imprimir([r.resumo() for r in avaliar(consultas, sistemas, julgamentos)])
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     configurar_logging(obter_config().nivel_log)
     args = _parser().parse_args(argv)
@@ -249,6 +332,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         codigo: int = args.executar(args)
     except (ErroAnonimizacao, ConectorDesativado) as exc:
         sys.stderr.write(f"buscajus: {exc}\n")
+        return 2
+    except ModuleNotFoundError as exc:
+        if exc.name not in ("sentence_transformers", "torch"):
+            raise
+        sys.stderr.write(
+            "buscajus: os modelos de embedding exigem o grupo opcional "
+            "(uv sync --group embeddings)\n"
+        )
         return 2
     return codigo
 
