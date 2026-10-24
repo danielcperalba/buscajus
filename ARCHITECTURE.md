@@ -12,6 +12,8 @@
 >
 > **Revisão 6 (24/10/2026)**: F1-01 executado no Brasil (3 cadernos TJPR, 347.005 comunicações, 5.482 ementas). Campos ausentes nos cadernos recentes (`numeroprocessocommascara`, `meiocompleto`, `idOrgao`), volume real (até 163 MB por caderno; limite de 1 GB e tmpfs de 1,1 GB), classe da citação vinda do cabeçalho (seção 9), regra de estado da comunicação com anomalia em falha fechada, filtros e janela de limite do `/comunicacao`.
 >
+> **Revisão 7 (24/10/2026)**: Fase 2. API do TJDFT acessível do Brasil (1.766.288 acórdãos em 24/10/2026); spike de estrutura só com agregados (seção 3.3): o filtro `dataPublicacao` usa a data UTC, o dia continua recebendo registros depois de publicado, `localDePublicacao` é `DJE` ou `PJe`, campos extras fora da lista branca. Tabela `classe_cnj` carregada de um arquivo versionado da TPU (seção 4.4).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -239,7 +241,11 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 | `termosAcessorios` → `base` | `acordaos` | 1,76 mi registros, **incluindo** os 258.371 de turmas recursais, que vêm com `base = "acordaos"`, `subbase = "acordaos-tr"` e `turmaRecursal = true`. `decisoes` fica fora (traz nomes de partes) |
 | `termosAcessorios` → `dataPublicacao` | um dia (`AAAA-MM-DD`) | Coleta por dia de publicação (ex.: 231 acórdãos em 20/10/2026) |
 
-**Campos consumidos** (`registros`): `uuid`, `identificador`, `base`, `processo`, `nomeRelator`, `descricaoOrgaoJulgador`, `dataJulgamento`, `dataPublicacao`, `ementa`, `decisao`, `codigoClasseCnj`, `segredoJustica`, `subbase`, `turmaRecursal`, `possuiInteiroTeor`. Total em `hits.value`.
+**Resposta** (spike F2-02, `backend/scripts/spike_api_tjdft.py`, só agregados; 2.093 registros de 20, 21 e 22/10/2026): objeto com `hits` (`{value}`), `agregacoes` (listas `{nome, total}` por base, classe, órgão, relator, relator designado, revisor e segredo), `paginacao` (`{pagina, tamanho}`) e `registros`. Uma página depois do fim responde 200 com `registros` vazio. A ordem dos registros foi a mesma em duas consultas da mesma página, e os uuids únicos bateram com `hits.value` nos três dias.
+
+**Campos dos registros**: `sequencial`, `base`, `subbase`, `uuid`, `identificador` (7 dígitos), `dataJulgamento`, `dataPublicacao` (`AAAA-MM-DDThh:mm:ss.sssZ`), `decisao`, `ementa` (texto puro, sem HTML nem entidades; mediana de ~3.400 caracteres), `localDePublicacao` (`DJE` ou `PJe`), `processo` (já com máscara CNJ), `nomeRelator` (maiúsculas, sem título), `relatorAtivo`, `uf`, `segredoJustica` (booleano), `turmaRecursal`, `descricaoOrgaoJulgador` (`3ª Turma Cível`; turmas recursais em maiúsculas), `versao` (texto, `"01"`), `codigoClasseCnj` (inteiro), `codigoSistjOrgaoJulgador`, `marcadores` (`{decisao, ementa, termosAuxiliares}`) e `possuiInteiroTeor` (falso em todos os registros sob segredo). `nomeRelatorDesignado` (~1,4%) e `nomeRevisor` (~0,4%) só aparecem em alguns registros.
+
+**Lista branca do bruto** (o resto é descartado antes de gravar): `uuid`, `identificador`, `base`, `subbase`, `turmaRecursal`, `processo`, `nomeRelator`, `nomeRelatorDesignado`, `nomeRevisor`, `descricaoOrgaoJulgador`, `codigoClasseCnj`, `dataJulgamento`, `dataPublicacao`, `localDePublicacao`, `ementa`, `decisao`, `segredoJustica`, `possuiInteiroTeor`, `versao`, mais os metadados da anonimização. Nunca são gravados `inteiroTeorHtml`, `marcadores`, `jurisprudenciaEmFoco` nem as agregações. Total em `hits.value`.
 
 **Regras**
 
@@ -250,8 +256,9 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 
 **Estratégia de coleta**
 
-- **Unidade de coleta**: um dia de `dataPublicacao`, paginado de 40 em 40 até `hits.value`. Não é preciso subdividir: a paginação profunda funciona.
-- **Fuso**: `dataPublicacao` vem em **UTC**. A data gravada é convertida para America/Sao_Paulo. Para não perder registros na virada do dia, a coleta diária consulta o dia mais recente **e reconsulta o dia anterior**, deduplicando por `uuid` (o upsert por `fonte + id_fonte` já garante isso).
+- **Unidade de coleta**: um dia do filtro `dataPublicacao`, paginado de 40 em 40 até `hits.value`. Não é preciso subdividir: a paginação profunda funciona.
+- **Fuso**: `dataPublicacao` e `dataJulgamento` vêm em **UTC**, e o filtro `dataPublicacao` compara a **data UTC** (100% dos 2.093 registros do spike). A maioria é publicada às `03:00Z` (meia-noite em São Paulo), mas 2,2% saem entre 0h e 3h UTC, ou seja, ainda no dia anterior em São Paulo. A data gravada é sempre convertida para America/Sao_Paulo; a unidade de coleta continua sendo a data UTC do filtro. Para não perder registros na virada do dia, a coleta diária consulta o dia mais recente **e reconsulta o dia anterior**, deduplicando por `uuid` (o upsert por `fonte + id_fonte` já garante isso).
+- **Dia ainda aberto**: um dia já publicado continua recebendo registros (20/10/2026 tinha 231 acórdãos no F2-01 e 691 em 24/10), o que reforça a recoleta dos últimos 30 dias.
 - **Recoleta**: os últimos 30 dias são reconsultados diariamente, para capturar correções e mudanças de segredo (~7 mil registros, ~175 requisições/dia).
 - **Carga inicial**: últimos 90 dias (alinhado ao DJEN), cerca de 15 mil acórdãos e algumas centenas de requisições.
 - **Carga completa** (fora do MVP): ~1,76 mi registros ÷ 40 ≈ **44 mil requisições** (~12 h a 1 req/s, mais pausas), executada dia a dia, do mais recente ao mais antigo, em horário de baixa carga.
@@ -415,7 +422,7 @@ CREATE INDEX acordao_trecho_hnsw ON acordao_trecho
 | `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
 | `coleta_bruta` | Metadados de cada arquivo bruto **filtrado**: origem (`caderno_djen_id` ou `coleta_janela_id` + `pagina`), `caminho_arquivo`, `sha256`, `bytes`, `itens`, `recebida_em`, `versao_parser`. Arquivos em `data/raw/{fonte}/{tribunal}/…` (volume Docker). |
 | `acordao_historico` | Versões anteriores de um acórdão quando `hash_conteudo` muda: `acordao_id`, `versao`, `snapshot` (jsonb dos campos normalizados), `substituido_em`. |
-| `classe_cnj` | `codigo`, `nome`, `codigo_pai`, carregada da TPU/CNJ. |
+| `classe_cnj` | `codigo`, `nome`, `codigo_pai`, `sigla`, `ativa`, `tpu_referencia`, carregada da TPU/CNJ pela migração 0006 a partir de `buscajus/db/dados/tpu_classes.json` (arquivo versionado com a data de referência, gerado por `backend/scripts/atualizar_tpu.py`; sem o glossário e sem os campos de auditoria, que identificam servidores do CNJ). Classes que saem da TPU não são apagadas. |
 | `bloqueio` | Conteúdo removido a pedido ou por decisão interna: `fonte`, `id_fonte` **ou** `numero_processo`, `motivo`, `pedido_remocao_id`, `criado_em`. Consultado no upsert para impedir reinserção na recoleta. |
 | `pedido_remocao` | Canal de remoção: `acordao_id`/`numero_processo`, `motivo`, `contato` (e-mail do solicitante, apagado após a retenção), `status` (`pendente`, `aceito`, `rejeitado`), `decisao`, `criado_em`, `resolvido_em`. |
 | `tarefa` | Fila simples em Postgres (`tipo`, `payload`, `status`, `agendada_para`, `tentativas`, `ultimo_erro`), consumida com `FOR UPDATE SKIP LOCKED`. |
