@@ -1,6 +1,7 @@
 """Processo de fundo: coleta agendada e geração de embeddings.
 
-Na Fase 0 o worker só sobe, registra que está ocioso e espera um sinal de parada.
+Por enquanto o worker só limpa a área temporária, registra que está ocioso e espera um
+sinal de parada.
 """
 
 import logging
@@ -8,15 +9,23 @@ import signal
 import threading
 from types import FrameType
 
-from buscajus.core.config import obter_config
+from buscajus.core.config import Config, obter_config
 from buscajus.core.logging import configurar_logging
+from buscajus.ingest import temporario
 
 log = logging.getLogger(__name__)
+
+
+def preparar(config: Config) -> None:
+    """Passos de inicialização: apaga cadernos órfãos de uma execução interrompida."""
+    temporario.limpar_orfaos(config.diretorio_tmp_cadernos)
+    temporario.preparar(config.diretorio_tmp_cadernos)
 
 
 def main() -> None:
     config = obter_config()
     configurar_logging(config.nivel_log)
+    preparar(config)
     parar = threading.Event()
 
     def _ao_receber_sinal(signum: int, _frame: FrameType | None) -> None:

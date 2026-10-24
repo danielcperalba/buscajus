@@ -41,11 +41,19 @@ class ConfigHttp(BaseModel):
 
 class ConfigDjen(BaseModel):
     ativo: bool = True
+    url_api: str = "https://comunicaapi.pje.jus.br"
     tribunais: list[str] = ["TJPR"]
     # Primeiro dia com "Ementa de Acórdão" no caderno de cada tribunal (seção 3.2).
     inicio_ementas: dict[str, date] = {"TJPR": date(2025, 7, 23)}
     tipos_documento_aceitos: list[str] = ["Ementa de Acórdão"]
     requisicoes_por_segundo: float = Field(default=1.0, gt=0)
+    # O ZIP fica no tmpfs do worker (256 MB no compose); o maior caderno do TJPR tem ~57 MB.
+    limite_bytes_caderno: int = Field(default=200 * 1024 * 1024, gt=0)
+    # Downloads cujo SHA-256 não confere com o campo hash, antes de marcar erro.
+    tentativas_hash: int = Field(default=3, ge=1)
+    # Valores de status de comunicação cancelada (a confirmar no F1-01); ativo = false e
+    # data_cancelamento preenchida também indicam cancelamento.
+    status_cancelamento: list[str] = ["C"]
 
     @field_validator("tribunais")
     @classmethod
