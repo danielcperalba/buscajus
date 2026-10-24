@@ -90,6 +90,24 @@ class ConfigTjdft(BaseModel):
     tentativas_integridade: int = Field(default=3, ge=1)
 
 
+class ConfigEmbeddings(BaseModel):
+    # Modelo ainda não fixado (F3-05/F3-06): nome no Hugging Face e revisão (commit).
+    modelo: str | None = None
+    revisao: str | None = None
+    # "auto" usa GPU (cuda) se houver; senão CPU.
+    dispositivo: str = "auto"
+    tamanho_lote: int = Field(default=32, ge=1)
+    # Fatiamento de ementas longas (F3-03), em tokens do próprio modelo.
+    tokens_por_trecho: int = Field(default=450, ge=16)
+    sobreposicao_tokens: int = Field(default=50, ge=0)
+
+    @model_validator(mode="after")
+    def _sobreposicao_menor_que_trecho(self) -> Self:
+        if self.sobreposicao_tokens >= self.tokens_por_trecho:
+            raise ValueError("embeddings.sobreposicao_tokens deve ser menor que tokens_por_trecho")
+        return self
+
+
 class ConfigAnonimizacao(BaseModel):
     # Modelo local de NER de pessoas (camada 2), escolhido no F1-36. Vazio: o pipeline do
     # DJEN não é criado e nenhum dado real é processado.
@@ -135,6 +153,7 @@ class Config(BaseSettings):
 
     http: ConfigHttp = ConfigHttp()
     anonimizacao: ConfigAnonimizacao = ConfigAnonimizacao()
+    embeddings: ConfigEmbeddings = ConfigEmbeddings()
     agendador: ConfigAgendador = ConfigAgendador()
     djen: ConfigDjen = ConfigDjen()
     tjdft: ConfigTjdft = ConfigTjdft()

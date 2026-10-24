@@ -38,6 +38,25 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest
 
+  # Embeddings com modelo real minúsculo (grupo opcional "embeddings", torch CPU). O job
+  # principal roda sem o grupo, e esses testes são pulados lá.
+  backend-modelo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-stsb-bert-tiny-f3cb857c
+      - run: uv sync --frozen --group embeddings
+      - run: uv run pytest -m modelo
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
