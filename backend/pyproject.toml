@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
+buscajus = "buscajus.cli:main"
 buscajus-worker = "buscajus.worker:main"
 
 [dependency-groups]
@@ -44,6 +45,7 @@ select = [
 ]
 ignore = [
     "RUF001", "RUF002", "RUF003", # textos em português usam caracteres como "º" e "–"
+    "N818", # exceções com nomes em português ("ErroColeta", "UnidadeSemDados")
 ]
 
 [tool.ruff.lint.per-file-ignores]

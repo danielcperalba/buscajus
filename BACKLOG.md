@@ -13,6 +13,7 @@ Convenções:
 - **Revisão 2 (22/10/2026)**: tarefas de anonimização (F1-34 a F1-38, F2-12), data inicial e carga histórica do TJPR (F1-32, F1-33). Os IDs são estáveis: tarefas novas recebem o próximo número da fase, mesmo quando aparecem no meio da lista.
 - **Revisão 3 (22/10/2026)**: classificação PF × PJ heurística com casos difíceis (F1-34), mascaramento de CPF (F1-39), condições do conjunto de avaliação do NER (F1-36) e registro da exclusão desse conjunto (F1-40).
 - **Revisão 4 (22/10/2026)**: F1-32 e F2-01 concluídos com os resultados registrados; conector TJDFT ajustado à API validada (F2-02, F2-04 a F2-08); carga histórica do TJPR desde 23/07/2025 (F1-33); regra de CPF reforçada (F1-39); reavaliação do segredo de justiça do TJDFT (F7-08). Correção posterior: `acordaos-tr` é subbase e `segredoJustica` é booleano (F2-01, F2-02, F2-06).
+- **Revisão 5 (24/10/2026)**: início da Fase 1 em blocos, um PR por bloco. Tarefas concluídas recebem **[concluído]** ao lado do ID. Bloco A (infraestrutura comum): F1-03 a F1-10 e F1-31.
 
 ---
 
@@ -43,14 +44,14 @@ Convenções:
 
 ### Modelo e infraestrutura de coleta
 
-- **F1-03** — Migração das tabelas de coleta. `caderno_djen`, `coleta_janela`, `coleta_bruta`, `tarefa`. **Pronto quando:** migração aplicada e revertida em teste. *Depende de:* F0-09.
-- **F1-04** — Migração das tabelas `acordao` e `acordao_historico`. Conforme a seção 4.2 (incluindo `link_tribunal`, colunas de anonimização, `busca_tsv`, índices e enums), sem `acordao_trecho` (Fase 3). **Pronto quando:** migração aplicada; teste de esquema confirma a ausência de colunas de partes/advogados. *Depende de:* F1-03.
-- **F1-05** — Migração das tabelas `bloqueio` e `pedido_remocao`. **Pronto quando:** migração aplicada. *Depende de:* F1-04.
-- **F1-06** — Cliente HTTP com rate limit. Wrapper `httpx` com *token bucket* por fonte, timeouts (longos para download), User-Agent identificável e leitura de `x-ratelimit-limit`/`x-ratelimit-remaining` com pausa preventiva quando o restante chega a zero. **Pronto quando:** testes mostram que as chamadas respeitam a taxa e pausam com `remaining=0`. *Depende de:* F0-08.
-- **F1-07** — Tratamento de 429 e erros transitórios. 429 → `Retry-After` ou 60 s; 5xx/timeout com backoff curto; máximo de tentativas. **Pronto quando:** testes com `respx` cobrem 429 com e sem `Retry-After`, 503 e timeout (relógio simulado). *Depende de:* F1-06.
-- **F1-08** — Armazenamento bruto filtrado. Grava só itens aceitos, já anonimizados e com lista branca aplicada, em JSONL.gz (DJEN: `data/raw/djen/{tribunal}/{data}/v{versao}.jsonl.gz`; TJDFT: por página) com sha256, e registra em `coleta_bruta`. **Pronto quando:** teste confirma que o arquivo só contém campos da lista branca. *Depende de:* F1-03.
-- **F1-09** — Protocolo `Conector` e orquestrador genérico. Interface da seção 3.4 (unidades de coleta, lotes, checkpoint opcional por página); o runner persiste o estado das unidades, aplica rate limit, grava o bruto e chama o processamento. **Pronto quando:** um conector *fake* em teste percorre unidades com e sem paginação. *Depende de:* F1-03, F1-07, F1-08.
-- **F1-10** — Retomada de coleta. Unidades concluídas são puladas, salvo com `--forcar`; caderno interrompido é reprocessado inteiro; unidade paginada continua da `ultima_pagina + 1`. **Pronto quando:** testes de interrupção nos dois modos. *Depende de:* F1-09.
+- **F1-03 [concluído]** — Migração das tabelas de coleta. `caderno_djen`, `coleta_janela`, `coleta_bruta`, `tarefa`. **Pronto quando:** migração aplicada e revertida em teste. *Depende de:* F0-09.
+- **F1-04 [concluído]** — Migração das tabelas `acordao` e `acordao_historico`. Conforme a seção 4.2 (incluindo `link_tribunal`, colunas de anonimização, `busca_tsv`, índices e enums), sem `acordao_trecho` (Fase 3). **Pronto quando:** migração aplicada; teste de esquema confirma a ausência de colunas de partes/advogados. *Depende de:* F1-03.
+- **F1-05 [concluído]** — Migração das tabelas `bloqueio` e `pedido_remocao`. **Pronto quando:** migração aplicada. *Depende de:* F1-04.
+- **F1-06 [concluído]** — Cliente HTTP com rate limit. Wrapper `httpx` com *token bucket* por fonte, timeouts (longos para download), User-Agent identificável e leitura de `x-ratelimit-limit`/`x-ratelimit-remaining` com pausa preventiva quando o restante chega a zero. **Pronto quando:** testes mostram que as chamadas respeitam a taxa e pausam com `remaining=0`. *Depende de:* F0-08.
+- **F1-07 [concluído]** — Tratamento de 429 e erros transitórios. 429 → `Retry-After` ou 60 s; 5xx/timeout com backoff curto; máximo de tentativas. **Pronto quando:** testes com `respx` cobrem 429 com e sem `Retry-After`, 503 e timeout (relógio simulado). *Depende de:* F1-06.
+- **F1-08 [concluído]** — Armazenamento bruto filtrado. Grava só itens aceitos, já anonimizados e com lista branca aplicada, em JSONL.gz (DJEN: `data/raw/djen/{tribunal}/{data}/v{versao}.jsonl.gz`; TJDFT: por página) com sha256, e registra em `coleta_bruta`. **Pronto quando:** teste confirma que o arquivo só contém campos da lista branca. *Depende de:* F1-03.
+- **F1-09 [concluído]** — Protocolo `Conector` e orquestrador genérico. Interface da seção 3.4 (unidades de coleta, lotes, checkpoint opcional por página); o runner persiste o estado das unidades, aplica rate limit, grava o bruto e chama o processamento. **Pronto quando:** um conector *fake* em teste percorre unidades com e sem paginação. *Depende de:* F1-03, F1-07, F1-08.
+- **F1-10 [concluído]** — Retomada de coleta. Unidades concluídas são puladas, salvo com `--forcar`; caderno interrompido é reprocessado inteiro; unidade paginada continua da `ultima_pagina + 1`. **Pronto quando:** testes de interrupção nos dois modos. *Depende de:* F1-09.
 
 ### Conector DJEN (caderno diário)
 
@@ -101,7 +102,7 @@ Convenções:
 - **F1-29** — Carga inicial de 90 dias do TJPR. Executar (~90 cadernos, ~5 GB transferidos) e registrar volumes: comunicações, ementas aceitas, substituições de anonimização (camadas 1 e 2), rejeitados pela falha segura, quarentena, cancelados, falhas de parser, cobertura da data de julgamento. **Pronto quando:** todos os cadernos `processado` ou `sem_caderno`, com relatório em `docs/`. *Depende de:* F1-28.
 - **F1-33** — Carga histórica do TJPR. Percorre **todos os dias úteis** do dia anterior à carga inicial até 23/07/2025, sem pular dias de volume baixo (há dias com 2 ou 22 ementas) e sem tratar dia vazio como erro; mesmo relatório de volumes, incluindo a distribuição diária. **Pronto quando:** todos os cadernos do período `processado` ou `sem_caderno`. *Depende de:* F1-29.
 - **F1-30** — Agendamento diário no `worker`. Processa o caderno novo assim que disponível e roda a checagem de versões (F1-16). **Pronto quando:** o agendador dispara as tarefas e registra a execução. *Depende de:* F1-28, F1-16.
-- **F1-31** — Relatório de coleta. `buscajus ingest status`: por caderno, versão, comunicações, acórdãos aceitos, quarentena, cancelados, falhas, 429; por janela TJDFT, totais equivalentes. **Pronto quando:** comando disponível. *Depende de:* F1-09.
+- **F1-31 [concluído]** — Relatório de coleta. `buscajus ingest status`: por caderno, versão, comunicações, acórdãos aceitos, quarentena, cancelados, falhas, 429; por janela TJDFT, totais equivalentes. **Pronto quando:** comando disponível. *Depende de:* F1-09.
 
 ---
 

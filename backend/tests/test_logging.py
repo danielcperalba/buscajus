@@ -20,3 +20,9 @@ def test_emite_uma_linha_json_com_campos_extras(capsys: pytest.CaptureFixture[st
 def test_desliga_log_de_acesso_do_uvicorn() -> None:
     configurar_logging("INFO")
     assert logging.getLogger("uvicorn.access").disabled
+
+
+def test_httpx_nao_registra_urls_em_info() -> None:
+    configurar_logging("DEBUG")
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+    assert not logging.getLogger("httpcore").isEnabledFor(logging.INFO)

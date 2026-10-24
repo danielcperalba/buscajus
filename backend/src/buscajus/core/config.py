@@ -19,6 +19,26 @@ NivelLog = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 TRIBUNAIS_COM_CONECTOR_PROPRIO = {"TJDFT": "tjdft"}
 
 
+# Identificação do projeto no User-Agent das requisições às fontes (ARCHITECTURE.md, seção 3.1).
+URL_PROJETO = "https://github.com/danielcperalba/buscajus"
+
+
+class ConfigHttp(BaseModel):
+    # Contato opcional (e-mail ou URL) incluído no User-Agent.
+    contato: str | None = None
+    timeout_segundos: float = Field(default=30, gt=0)
+    timeout_conexao_segundos: float = Field(default=10, gt=0)
+    timeout_download_segundos: float = Field(default=300, gt=0)
+    max_tentativas: int = Field(default=5, ge=1)
+    # Erros 5xx e timeouts: espera antes de cada nova tentativa (o último valor se repete).
+    backoff_segundos: list[float] = Field(default=[5, 15, 45], min_length=1)
+    # 429 sem Retry-After; com Retry-After, a espera pedida é limitada ao máximo.
+    espera_429_segundos: float = Field(default=60, ge=0)
+    espera_maxima_429_segundos: float = Field(default=600, ge=0)
+    # Pausa preventiva quando x-ratelimit-remaining chega a zero.
+    pausa_limite_esgotado_segundos: float = Field(default=60, ge=0)
+
+
 class ConfigDjen(BaseModel):
     ativo: bool = True
     tribunais: list[str] = ["TJPR"]
@@ -70,6 +90,7 @@ class Config(BaseSettings):
     diretorio_tmp_cadernos: Path = Path("data/tmp-cadernos")
     diretorio_modelos: Path = Path("data/modelos")
 
+    http: ConfigHttp = ConfigHttp()
     djen: ConfigDjen = ConfigDjen()
     tjdft: ConfigTjdft = ConfigTjdft()
 

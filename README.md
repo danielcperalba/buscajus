@@ -57,6 +57,14 @@ BUSCAJUS_TEST_DATABASE_URL=postgresql+psycopg://buscajus:buscajus@localhost:5432
 
 Migrações fora do compose: `uv run alembic upgrade head` (usa `BUSCAJUS_DATABASE_URL`).
 
+### Ingestão
+
+```bash
+uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]
+```
+
+Mostra o estado de cada unidade de coleta (caderno do DJEN ou janela paginada) com as contagens de comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro.
+
 ### Frontend
 
 ```bash
