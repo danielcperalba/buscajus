@@ -451,7 +451,10 @@ Etapas (`ingest.djen.parser`, com `versao_parser` registrada):
    - **Qualquer outro rótulo é descartado.**
 4. **Ementa**: texto do restante do documento, sem a tabela de cabeçalho. Converter `<br>`, `<p>` e `<div>` em quebras de linha, remover as tags restantes e normalizar espaços (incluindo ` `), hifenização de quebra de linha e linhas vazias repetidas. Manter o rótulo "EMENTA" se ele fizer parte do texto original.
 5. **Validação**: ementa vazia ou com menos de N caracteres → item rejeitado e contado como `falha_parser` no caderno (o bruto filtrado fica disponível para depuração).
-6. **Fallback**: se não houver tabela, tentar padrões textuais (`Processo:`, `Relator(a):`, `Data do Julgamento:`) no início do texto. Se ainda falhar, a ementa vira o texto inteiro limpo e `relator`/`data_julgamento` ficam nulos, com métrica de fallback.
+6. **Fallback**: se não houver tabela, tentar padrões textuais (`Processo:`, `Relator(a):`, `Data do Julgamento:`) no início do texto. Se ainda falhar, a ementa vira o texto inteiro limpo e `relator`/`data_julgamento` ficam nulos, com métrica de fallback. Um `EMENTA:` sem nenhum rótulo de cabeçalho antes é o começo do próprio texto, não um rótulo.
+7. **Processo e classe**: a célula `Processo` traz a classe colada ao número (`0042094-26.2025.8.16.0014(Recurso Inominado)`); o parser separa os dois. Na divergência entre o número do cabeçalho e o campo estruturado, prevalece o campo estruturado.
+
+Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Módulos: `ingest.texto` (entidades, NFC, espaços), `ingest.djen.parser`, `ingest.processo` e `ingest.relator`.
 
 ### 5.2 Campos comuns
 
