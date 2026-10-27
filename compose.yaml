@@ -76,8 +76,10 @@ services:
     build: ./frontend
     image: buscajus-web
     environment:
-      # Usada pelo servidor Next.js a partir da Fase 5.
+      # Usada pelo servidor Next.js: as páginas chamam a API no servidor.
       API_URL: http://api:8000
+      # E-mail do projeto exibido como texto na página de remoção (opcional).
+      CONTATO_EMAIL: ${CONTATO_EMAIL:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
