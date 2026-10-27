@@ -77,3 +77,41 @@ export async function sugerirRelatores(prefixo: string): Promise<Resposta<Relato
   const api = await cliente();
   return chamar(() => api.GET("/api/v1/relatores", { params: { query: { prefixo } } }));
 }
+
+export type PedidoRemocao = Esquemas["PedidoRemocao"];
+export type RemocaoRecebida = Esquemas["RemocaoRecebida"];
+
+/** Detalhe; 410 (cancelado ou removido) vem em ``falha`` com o corpo ``Indisponivel``. */
+export async function obterDetalhe(
+  id: number,
+): Promise<Resposta<DetalheAcordao> & { indisponivel?: Indisponivel }> {
+  const api = await cliente();
+  try {
+    const { data, error, response } = await api.GET("/api/v1/acordaos/{acordao_id}", {
+      params: { path: { acordao_id: id } },
+    });
+    if (data !== undefined && response.ok) return { dados: data };
+    if (response.status === 410 && error && typeof error === "object" && "erro" in error) {
+      const indisponivel = error as Indisponivel;
+      return {
+        falha: { status: 410, erro: indisponivel.erro, mensagem: indisponivel.mensagem },
+        indisponivel,
+      };
+    }
+    return { falha: falha(response.status, error) };
+  } catch {
+    return {
+      falha: { status: 0, erro: "indisponivel", mensagem: "não foi possível falar com a API" },
+    };
+  }
+}
+
+export async function obterProcesso(numero: string): Promise<Resposta<AcordaosDoProcesso>> {
+  const api = await cliente();
+  return chamar(() => api.GET("/api/v1/processos/{numero}", { params: { path: { numero } } }));
+}
+
+export async function registrarRemocao(pedido: PedidoRemocao): Promise<Resposta<RemocaoRecebida>> {
+  const api = await cliente();
+  return chamar(() => api.POST("/api/v1/remocao", { body: pedido }));
+}

@@ -359,3 +359,70 @@ nav ul {
     flex-direction: column;
   }
 }
+
+/* Detalhe, páginas de texto e formulário de remoção (bloco P) */
+.pagina-texto,
+.detalhe {
+  max-width: 46rem;
+}
+
+.detalhe-rotulo {
+  color: var(--texto-suave);
+  margin-bottom: 0;
+}
+
+.detalhe h1 {
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.25rem;
+}
+
+.texto-integral {
+  white-space: pre-line;
+}
+
+.citacao {
+  background: var(--superficie);
+  border-left: 4px solid var(--destaque);
+  padding: 0.75rem 1rem;
+}
+
+.links-oficiais {
+  padding-left: 1.25rem;
+}
+
+.solicitar-remocao {
+  margin-top: 2rem;
+  color: var(--texto-suave);
+}
+
+.form-remocao {
+  display: grid;
+  gap: 1rem;
+  max-width: 36rem;
+}
+
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.ajuda {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.erro-campo {
+  color: var(--erro);
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+}
+
+[aria-invalid="true"] {
+  border-color: var(--erro);
+}
