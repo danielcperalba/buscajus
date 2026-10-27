@@ -8,6 +8,8 @@ Comandos:
 - ``buscajus ingest reprocessar --fonte djen [--tribunal T] --de AAAA-MM-DD --ate AAAA-MM-DD``
 - ``buscajus ingest verificar-versoes --tribunal T [--dias 30]``
 - ``buscajus ingest status [--fonte F] [--tribunal T] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]``
+- ``buscajus remocao listar | aceitar ID --decisao TEXTO | rejeitar ID --decisao TEXTO``
+- ``buscajus remocao limpar-contatos [--dias N]``
 - ``buscajus api openapi`` (imprime o contrato; versionado em ``frontend/openapi.json``)
 - ``buscajus eval pool --consultas ARQ --saida ARQ.csv [--modelo NOME[@REVISAO]]... [--k 20]``
 - ``buscajus eval metricas --consultas ARQ --julgamentos ARQ.csv [--modelo NOME[@REVISAO]]...``
@@ -23,6 +25,7 @@ from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
+from buscajus.busca import pedidos
 from buscajus.core.config import obter_config
 from buscajus.core.logging import configurar_logging
 from buscajus.db.engine import obter_engine
@@ -106,6 +109,24 @@ def _parser() -> argparse.ArgumentParser:
     st.add_argument("--de", type=_data)
     st.add_argument("--ate", type=_data)
     st.set_defaults(executar=_status)
+
+    remocao = comandos.add_parser("remocao", help="decisão dos pedidos de remoção (F4-12)")
+    sub_remocao = remocao.add_subparsers(dest="subcomando", required=True)
+    listar = sub_remocao.add_parser("listar", help="pedidos pendentes")
+    listar.set_defaults(executar=_remocao_listar)
+    for nome, ajuda, funcao in (
+        ("aceitar", "remove o acórdão (ou os do processo) e apaga o conteúdo", _remocao_aceitar),
+        ("rejeitar", "registra a recusa", _remocao_rejeitar),
+    ):
+        decidir = sub_remocao.add_parser(nome, help=ajuda)
+        decidir.add_argument("pedido", type=int)
+        decidir.add_argument("--decisao", required=True, help="justificativa registrada")
+        decidir.set_defaults(executar=funcao)
+    limpar = sub_remocao.add_parser(
+        "limpar-contatos", help="apaga o e-mail dos pedidos resolvidos há mais de N dias"
+    )
+    limpar.add_argument("--dias", type=int, help="padrão: api.retencao_contato_dias")
+    limpar.set_defaults(executar=_remocao_limpar)
 
     api = comandos.add_parser("api", help="contrato da API")
     sub_api = api.add_subparsers(dest="subcomando", required=True)
@@ -284,6 +305,32 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _remocao_listar(_args: argparse.Namespace) -> int:
+    _imprimir([vars(p) for p in pedidos.listar(obter_engine())])
+    return 0
+
+
+def _remocao_aceitar(args: argparse.Namespace) -> int:
+    config = obter_config()
+    removidos = pedidos.aceitar(
+        obter_engine(), ArmazenamentoBruto(config.diretorio_raw), args.pedido, args.decisao
+    )
+    _imprimir({"pedido": args.pedido, "status": "aceito", "acordaos_removidos": removidos})
+    return 0
+
+
+def _remocao_rejeitar(args: argparse.Namespace) -> int:
+    pedidos.rejeitar(obter_engine(), args.pedido, args.decisao)
+    _imprimir({"pedido": args.pedido, "status": "rejeitado"})
+    return 0
+
+
+def _remocao_limpar(args: argparse.Namespace) -> int:
+    dias = args.dias if args.dias is not None else obter_config().api.retencao_contato_dias
+    _imprimir({"contatos_apagados": pedidos.limpar_contatos(obter_engine(), dias)})
+    return 0
+
+
 def _openapi(_args: argparse.Namespace) -> int:
     from buscajus.api.app import criar_app, openapi_json
 
@@ -352,7 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         codigo: int = args.executar(args)
-    except (ErroAnonimizacao, ConectorDesativado) as exc:
+    except (ErroAnonimizacao, ConectorDesativado, pedidos.PedidoInvalido) as exc:
         sys.stderr.write(f"buscajus: {exc}\n")
         return 2
     except ModuleNotFoundError as exc:

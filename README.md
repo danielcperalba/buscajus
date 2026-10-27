@@ -101,7 +101,17 @@ uv run buscajus api openapi > ../frontend/openapi.json
 
 # API com dados sintéticos fixos, para o frontend antes da busca real
 BUSCAJUS_API__MOCK=true uv run uvicorn buscajus.api.app:criar_app --factory --reload
+
+# Pedidos de remoção: listar, decidir (aceitar apaga o conteúdo; ver ARCHITECTURE 4.5) e
+# apagar o e-mail dos pedidos resolvidos há mais de api.retencao_contato_dias
+uv run buscajus remocao listar
+uv run buscajus remocao aceitar 12 --decisao "nome de parte no texto"
+uv run buscajus remocao rejeitar 13 --decisao "não há dado pessoal no texto"
+uv run buscajus remocao limpar-contatos
 ```
+
+- A busca usa o full-text do Postgres; o ramo vetorial entra depois que o modelo de embeddings for fixado (F3-06).
+- Limite por IP: 60 consultas por minuto e 5 pedidos de remoção por hora (`BUSCAJUS_API__*`).
 
 ### Avaliação da busca (Fase 3)
 

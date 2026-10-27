@@ -20,6 +20,8 @@
 >
 > **Revisão 10 (27/10/2026)**: contrato da API (seção 10.1), com mock para o frontend, e detecção do número de processo na consulta (seção 8.2).
 >
+> **Revisão 11 (27/10/2026)**: busca implementada com dados sintéticos (seção 8.8), ramo vetorial atrás de uma interface e desligado até o F3-06; limite de taxa e canal de remoção na API (seções 6.5 e 10.1); liberação de bloqueio só manual (seção 4.5).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -462,6 +464,8 @@ Acórdãos cancelados **não são apagados** (rastreabilidade); apenas deixam de
 
 **Removidos** (F2-13, `ingest.remocao.remover`; segredo superveniente no TJDFT e pedido de remoção aceito): além de `situacao = 'removido'`, o conteúdo é apagado. Cria-se um `bloqueio` por fonte + id (nenhuma recoleta nem reprocessamento reinsere o acórdão); ementa e decisão são apagadas em `acordao` e nos snapshots de `acordao_historico`; os trechos são apagados (F3-09); e os arquivos brutos em que o registro pode estar (o da última coleta e todos os dos diretórios das unidades do dia, registrados ou não) são reescritos sem ele, com `coleta_bruta` atualizada. Um item bloqueado que reaparece numa coleta ou num reprocessamento não é gravado no banco e sai do arquivo bruto do lote. Fica no banco só o registro de que o acórdão existiu (número, datas, links, motivo).
 
+**Liberação só manual**: o bloqueio não é desfeito por nenhum processo automático, nem quando a fonte tira o segredo de justiça de um acórdão. Liberar um acórdão removido exige ação manual (apagar o `bloqueio` no banco e recoletar a unidade com `--forcar`), registrada fora do sistema.
+
 Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha nova com `INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING` (corrida entre transações vira atualização); o snapshot do histórico é `to_jsonb` da linha sem `busca_tsv`. `removido` e `duplicado` não são desfeitos pela recoleta. O reprocessamento sem rede (`buscajus ingest reprocessar`) relê o bruto da versão corrente do caderno e refaz normalização, PII e upsert; a camada 1 não pode ser refeita daí, porque os destinatários nunca são gravados.
 
 ---
@@ -589,7 +593,8 @@ Se encontrar algo, o acórdão vai para `quarentena` (não indexado, não exibid
 ### 6.5 Canal de remoção
 
 - Página pública `/remocao` com formulário (número do processo ou link do resultado, motivo, e-mail de contato) e um e-mail de contato exibido como texto.
-- `POST /api/v1/remocao` grava em `pedido_remocao`. O e-mail do solicitante é usado só para responder e é apagado após a resolução e o prazo de retenção.
+- `POST /api/v1/remocao` grava em `pedido_remocao`. A referência é o número completo do processo (com ou sem máscara) ou o link do resultado (`/acordao/{id}`); outra coisa → 422 `referencia_invalida`. O e-mail do solicitante é usado só para responder e é apagado `api.retencao_contato_dias` (90) dias após a resolução (`buscajus remocao limpar-contatos`).
+- Decisão: `buscajus remocao listar`, `aceitar ID --decisao …` ou `rejeitar ID --decisao …` (F4-12). Um pedido por número remove todos os acórdãos do processo e cria um bloqueio por `numero_processo`, que também barra acórdãos do processo coletados depois.
 - Remoção aceita → regra geral da seção 4.5 (`ingest.remocao.remover`): `bloqueio`, `situacao = 'removido'`, ementa e decisão apagadas no banco e no histórico, trechos apagados e arquivos brutos reescritos sem o registro. A recoleta não reinsere.
 - A página `/privacidade` descreve os dados tratados, a base legal, as fontes e o canal de remoção.
 
@@ -722,6 +727,15 @@ LIMIT 100;
 
 `tribunal`, `orgao_julgador`, `classe` (código CNJ), `relator` (por `relator_chave`, com sugestão por trigrama), período (`data_inicio`/`data_fim` sobre `data_referencia`, que prioriza a data de julgamento). Os filtros valem igualmente nos dois ramos. `GET /api/v1/filtros` devolve os valores disponíveis (com cache).
 
+### 8.8 Implementação (Bloco N)
+
+- `buscajus.busca.servico.ServicoPostgres`: consulta que é só número de processo → busca exata ou por prefixo (`busca.filtros` + ordem por `data_referencia` desc); senão, ramo full-text (`busca.texto`) e ramo vetorial (`busca.vetorial`) fundidos por RRF (`busca.fusao`), até 200 resultados, páginas de 20. Número junto com outros termos vira filtro nos dois ramos.
+- O ramo vetorial entra pela interface `RamoVetorial` e fica desligado (`RamoVetorialDesligado`, que não devolve nada) até o modelo ser fixado (F3-06) e existir `acordao_trecho` (F3-07). Até lá a busca "híbrida" é só full-text, com a mesma fusão.
+- Trecho: `ts_headline` com delimitadores de uso privado, trocados por `<mark>` depois de escapar o texto (o `ts_headline` já descarta as tags da ementa); sem termo destacado, o começo da ementa, escapado.
+- Citação: `busca.citacao.citar` (seção 9), na resposta de busca, detalhe e processo.
+- Detalhe: 410 para `cancelado` (com o link oficial) e `removido`; 404 para inexistente, `quarentena` e `duplicado`.
+- Parâmetros em `busca.*` (`rrf_k`, `peso_texto`, `peso_vetor`, `top_ramo`, `limite_prefixo`, `cache_filtros_segundos`), ajustados no F6-07.
+
 ### 8.7 Desempenho esperado (MVP)
 
 Com ~250–350 mil ementas (após a carga histórica do TJPR): full-text e HNSW em dezenas de ms; embedding da consulta em CPU (e5-base) em ~30–80 ms. Meta: p95 < 500 ms sem reordenação. Cache de embeddings de consultas repetidas (LRU em memória).
@@ -778,9 +792,10 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 ### 10.1 Contrato (F4-01)
 
 - Esquemas em `buscajus.api.esquemas`; o OpenAPI fica versionado em `frontend/openapi.json` (gerado por `buscajus api openapi`), e um teste falha se o contrato mudar sem regenerar o arquivo. O frontend gera os tipos a partir dele (F5-01).
-- Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`, 422 `consulta_vazia`/`numero_invalido`, 501 `nao_implementado`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
+- Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`; 422 `consulta_vazia`, `periodo_invalido`, `numero_invalido`, `referencia_invalida`; 429 `limite_excedido`, com `Retry-After`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
 - `/busca` devolve `consulta` (normalizada), `tipo` (`hibrida` ou `processo`), `numero_processo` detectado, `filtros`, `pagina` (1 a 10), `por_pagina` (20), `total` (até 200) e `resultados`. O `trecho` é a ementa escapada, e o único HTML possível é `<mark>`.
-- Enquanto a busca não existe, as rotas (menos `/saude`) respondem 501. Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar antes da busca real.
+- O serviço real é `busca.servico.ServicoPostgres` (seção 8.8). Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar sem banco.
+- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, detalhe, processo, filtros e relatores, e `api.remocoes_por_hora` (5) para a remoção. Atrás do proxy reverso, `api.confiar_x_forwarded_for = true`. A contagem é por processo da API; com vários processos, cada um conta o seu.
 
 Item de resultado:
 
