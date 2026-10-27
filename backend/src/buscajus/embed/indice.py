@@ -3,7 +3,7 @@
 São "sistemas" de busca para comparar modelos antes de existir a tabela ``acordao_trecho``
 (F3-07) e a API de busca (Fase 4). O vetorial fatia cada ementa (F3-03), gera os vetores das
 passagens e, na consulta, pontua cada acórdão pelo seu melhor trecho (similaridade de cosseno).
-O full-text usa a coluna ``busca_tsv`` com OR entre os lexemas e ``ts_rank_cd`` (seção 8.4).
+O full-text é o mesmo ramo da busca (``busca.texto.ramo_texto``, seção 8.4), sem filtros.
 """
 
 from collections.abc import Iterable
@@ -13,6 +13,8 @@ from typing import Protocol
 import numpy as np
 from sqlalchemy import Engine, text
 
+from buscajus.api.esquemas import FiltrosBusca
+from buscajus.busca.texto import ramo_texto
 from buscajus.embed.embedder import Embedder
 from buscajus.embed.fatiamento import fatiar
 
@@ -89,25 +91,8 @@ class BuscaTextoPostgres:
 
     def buscar(self, consulta: str, k: int) -> list[Resultado]:
         with self._engine.connect() as conexao:
-            linhas = conexao.execute(
-                text("""
-                    -- OR entre os lexemas já normalizados da consulta; 'simple' não refaz o
-                    -- radical, e quote_literal protege caracteres especiais.
-                    WITH q AS (
-                        SELECT to_tsquery('simple', array_to_string(ARRAY(
-                            SELECT quote_literal(lexema) FROM unnest(tsvector_to_array(
-                                to_tsvector('pt_unaccent', :consulta))) AS lexema
-                        ), ' | ')) AS q
-                    )
-                    SELECT a.id, ts_rank_cd(a.busca_tsv, q.q, 32) AS pontuacao
-                    FROM acordao a, q
-                    WHERE a.situacao = 'ativo' AND a.busca_tsv @@ q.q
-                    ORDER BY pontuacao DESC, a.id
-                    LIMIT :k
-                """),
-                {"consulta": consulta, "k": k},
-            ).all()
-        return [Resultado(str(linha.id), float(linha.pontuacao)) for linha in linhas]
+            resultados = ramo_texto(conexao, consulta, FiltrosBusca(), limite=k)
+        return [Resultado(str(i), pontuacao) for i, pontuacao in resultados]
 
 
 def documentos_ativos(engine: Engine, limite: int | None = None) -> list[Documento]:
