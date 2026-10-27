@@ -1,0 +1,1304 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BuscaJus",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/saude": {
+      "get": {
+        "summary": "Saude",
+        "operationId": "saude_api_v1_saude_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Saude"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/busca": {
+      "get": {
+        "summary": "Buscar",
+        "description": "Busca híbrida, ou por número de processo quando a consulta é um número (F4-02).",
+        "operationId": "buscar_api_v1_busca_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "tribunal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tribunal"
+            }
+          },
+          {
+            "name": "orgao",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Orgao"
+            }
+          },
+          {
+            "name": "classe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Código da classe na TPU",
+              "title": "Classe"
+            },
+            "description": "Código da classe na TPU"
+          },
+          {
+            "name": "relator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "relator_chave (ver /relatores)",
+              "title": "Relator"
+            },
+            "description": "relator_chave (ver /relatores)"
+          },
+          {
+            "name": "data_inicio",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Data Inicio"
+            }
+          },
+          {
+            "name": "data_fim",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Data Fim"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10,
+              "minimum": 1,
+              "default": 1,
+              "title": "Pagina"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespostaBusca"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/api/v1/acordaos/{acordao_id}": {
+      "get": {
+        "summary": "Detalhe",
+        "description": "Detalhe; 410 para cancelado ou removido, 404 para inexistente ou em quarentena.",
+        "operationId": "detalhe_api_v1_acordaos__acordao_id__get",
+        "parameters": [
+          {
+            "name": "acordao_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Acordao Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalheAcordao"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Implemented"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Indisponivel"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/processos/{numero}": {
+      "get": {
+        "summary": "Processo",
+        "description": "Acórdãos de um processo, com ou sem máscara (prefixo a partir de NNNNNNN-DD).",
+        "operationId": "processo_api_v1_processos__numero__get",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "title": "Numero"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcordaosDoProcesso"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/api/v1/filtros": {
+      "get": {
+        "summary": "Filtros",
+        "operationId": "filtros_api_v1_filtros_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Filtros"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not Implemented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/relatores": {
+      "get": {
+        "summary": "Relatores",
+        "operationId": "relatores_api_v1_relatores_get",
+        "parameters": [
+          {
+            "name": "prefixo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100,
+              "title": "Prefixo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Relator"
+                  },
+                  "title": "Response Relatores Api V1 Relatores Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Implemented"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/remocao": {
+      "post": {
+        "summary": "Remocao",
+        "description": "Pedido de remoção (canal da seção 6.5).",
+        "operationId": "remocao_api_v1_remocao_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PedidoRemocao"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemocaoRecebida"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not Implemented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcordaosDoProcesso": {
+        "properties": {
+          "numero_processo": {
+            "type": "string",
+            "title": "Numero Processo"
+          },
+          "acordaos": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoBusca"
+            },
+            "type": "array",
+            "title": "Acordaos",
+            "description": "Do mais recente ao mais antigo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "numero_processo",
+          "acordaos"
+        ],
+        "title": "AcordaosDoProcesso"
+      },
+      "Classe": {
+        "properties": {
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo",
+            "description": "Código da classe na TPU do CNJ"
+          },
+          "nome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nome"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "codigo",
+          "nome"
+        ],
+        "title": "Classe"
+      },
+      "DetalheAcordao": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "fonte": {
+            "type": "string",
+            "enum": [
+              "djen",
+              "tjdft"
+            ],
+            "title": "Fonte"
+          },
+          "tribunal": {
+            "type": "string",
+            "title": "Tribunal",
+            "examples": [
+              "TJPR",
+              "TJDFT"
+            ]
+          },
+          "numero_processo": {
+            "type": "string",
+            "title": "Numero Processo",
+            "description": "Número CNJ com máscara"
+          },
+          "orgao_julgador": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orgao Julgador"
+          },
+          "classe": {
+            "$ref": "#/components/schemas/Classe"
+          },
+          "relator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relator"
+          },
+          "relator_designado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relator Designado",
+            "description": "TJDFT: relator para o acórdão (a citação usa 'Rel. p/ acórdão')"
+          },
+          "turma_recursal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turma Recursal"
+          },
+          "data_julgamento": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Julgamento"
+          },
+          "data_publicacao": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Publicacao",
+            "description": "TJDFT; nula no DJEN (não é calculada)"
+          },
+          "data_disponibilizacao": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Disponibilizacao",
+            "description": "DJEN"
+          },
+          "link_oficial": {
+            "type": "string",
+            "title": "Link Oficial",
+            "description": "DJEN: certidão do CNJ; TJDFT: página do acórdão"
+          },
+          "link_tribunal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Tribunal",
+            "description": "DJEN: documento no sistema do tribunal"
+          },
+          "citacao": {
+            "type": "string",
+            "title": "Citacao",
+            "description": "Copiar exatamente como veio (regra da seção 9)"
+          },
+          "aviso": {
+            "type": "string",
+            "title": "Aviso",
+            "default": "Texto reproduzido da fonte oficial. Consulte o documento original."
+          },
+          "ementa": {
+            "type": "string",
+            "title": "Ementa"
+          },
+          "decisao": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisao",
+            "description": "TJDFT: dispositivo"
+          },
+          "possui_inteiro_teor": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Possui Inteiro Teor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fonte",
+          "tribunal",
+          "numero_processo",
+          "orgao_julgador",
+          "classe",
+          "relator",
+          "relator_designado",
+          "turma_recursal",
+          "data_julgamento",
+          "data_publicacao",
+          "data_disponibilizacao",
+          "link_oficial",
+          "link_tribunal",
+          "citacao",
+          "ementa",
+          "decisao",
+          "possui_inteiro_teor"
+        ],
+        "title": "DetalheAcordao"
+      },
+      "Erro": {
+        "properties": {
+          "erro": {
+            "type": "string",
+            "title": "Erro",
+            "description": "Código do erro, estável (ex.: nao_encontrado)"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "erro",
+          "mensagem"
+        ],
+        "title": "Erro"
+      },
+      "Filtros": {
+        "properties": {
+          "tribunais": {
+            "items": {
+              "$ref": "#/components/schemas/OpcaoFiltro"
+            },
+            "type": "array",
+            "title": "Tribunais"
+          },
+          "orgaos": {
+            "items": {
+              "$ref": "#/components/schemas/OpcaoFiltro"
+            },
+            "type": "array",
+            "title": "Orgaos"
+          },
+          "classes": {
+            "items": {
+              "$ref": "#/components/schemas/OpcaoFiltro"
+            },
+            "type": "array",
+            "title": "Classes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tribunais",
+          "orgaos",
+          "classes"
+        ],
+        "title": "Filtros"
+      },
+      "FiltrosBusca": {
+        "properties": {
+          "tribunal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tribunal"
+          },
+          "orgao": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orgao"
+          },
+          "classe": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classe"
+          },
+          "relator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relator",
+            "description": "relator_chave"
+          },
+          "data_inicio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Inicio"
+          },
+          "data_fim": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Fim"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FiltrosBusca"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Indisponivel": {
+        "properties": {
+          "erro": {
+            "type": "string",
+            "enum": [
+              "cancelado",
+              "removido"
+            ],
+            "title": "Erro"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          },
+          "link_oficial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Oficial",
+            "description": "Fonte oficial, quando ainda faz sentido indicá-la"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "erro",
+          "mensagem"
+        ],
+        "title": "Indisponivel",
+        "description": "Acórdão que existiu mas não pode ser exibido (HTTP 410)."
+      },
+      "OpcaoFiltro": {
+        "properties": {
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "rotulo": {
+            "type": "string",
+            "title": "Rotulo"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "valor",
+          "rotulo",
+          "total"
+        ],
+        "title": "OpcaoFiltro"
+      },
+      "PedidoRemocao": {
+        "properties": {
+          "referencia": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 5,
+            "title": "Referencia",
+            "description": "Número do processo ou link do resultado"
+          },
+          "motivo": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Motivo"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email",
+            "description": "Usado só para responder; apagado após a resolução"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "referencia",
+          "motivo",
+          "email"
+        ],
+        "title": "PedidoRemocao"
+      },
+      "Relator": {
+        "properties": {
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "chave": {
+            "type": "string",
+            "title": "Chave",
+            "description": "Valor do filtro 'relator' na busca"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nome",
+          "chave"
+        ],
+        "title": "Relator"
+      },
+      "RemocaoRecebida": {
+        "properties": {
+          "protocolo": {
+            "type": "integer",
+            "title": "Protocolo"
+          },
+          "status": {
+            "type": "string",
+            "const": "pendente",
+            "title": "Status"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "protocolo",
+          "status",
+          "mensagem"
+        ],
+        "title": "RemocaoRecebida"
+      },
+      "RespostaBusca": {
+        "properties": {
+          "consulta": {
+            "type": "string",
+            "title": "Consulta",
+            "description": "Consulta normalizada"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "hibrida",
+              "processo"
+            ],
+            "title": "Tipo",
+            "description": "processo: a consulta era um número de processo (busca exata ou prefixo)"
+          },
+          "numero_processo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Processo",
+            "description": "Número detectado na consulta (com máscara, ou os dígitos do prefixo)"
+          },
+          "filtros": {
+            "$ref": "#/components/schemas/FiltrosBusca"
+          },
+          "pagina": {
+            "type": "integer",
+            "title": "Pagina"
+          },
+          "por_pagina": {
+            "type": "integer",
+            "title": "Por Pagina",
+            "default": 20
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Até 200; não há páginas além disso"
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoBusca"
+            },
+            "type": "array",
+            "title": "Resultados"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consulta",
+          "tipo",
+          "numero_processo",
+          "filtros",
+          "pagina",
+          "total",
+          "resultados"
+        ],
+        "title": "RespostaBusca"
+      },
+      "ResultadoBusca": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "fonte": {
+            "type": "string",
+            "enum": [
+              "djen",
+              "tjdft"
+            ],
+            "title": "Fonte"
+          },
+          "tribunal": {
+            "type": "string",
+            "title": "Tribunal",
+            "examples": [
+              "TJPR",
+              "TJDFT"
+            ]
+          },
+          "numero_processo": {
+            "type": "string",
+            "title": "Numero Processo",
+            "description": "Número CNJ com máscara"
+          },
+          "orgao_julgador": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orgao Julgador"
+          },
+          "classe": {
+            "$ref": "#/components/schemas/Classe"
+          },
+          "relator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relator"
+          },
+          "relator_designado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relator Designado",
+            "description": "TJDFT: relator para o acórdão (a citação usa 'Rel. p/ acórdão')"
+          },
+          "turma_recursal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turma Recursal"
+          },
+          "data_julgamento": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Julgamento"
+          },
+          "data_publicacao": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Publicacao",
+            "description": "TJDFT; nula no DJEN (não é calculada)"
+          },
+          "data_disponibilizacao": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Disponibilizacao",
+            "description": "DJEN"
+          },
+          "link_oficial": {
+            "type": "string",
+            "title": "Link Oficial",
+            "description": "DJEN: certidão do CNJ; TJDFT: página do acórdão"
+          },
+          "link_tribunal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Tribunal",
+            "description": "DJEN: documento no sistema do tribunal"
+          },
+          "citacao": {
+            "type": "string",
+            "title": "Citacao",
+            "description": "Copiar exatamente como veio (regra da seção 9)"
+          },
+          "aviso": {
+            "type": "string",
+            "title": "Aviso",
+            "default": "Texto reproduzido da fonte oficial. Consulte o documento original."
+          },
+          "trecho": {
+            "type": "string",
+            "title": "Trecho",
+            "description": "Trecho da ementa; o único HTML possível é <mark> em volta dos termos"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fonte",
+          "tribunal",
+          "numero_processo",
+          "orgao_julgador",
+          "classe",
+          "relator",
+          "relator_designado",
+          "turma_recursal",
+          "data_julgamento",
+          "data_publicacao",
+          "data_disponibilizacao",
+          "link_oficial",
+          "link_tribunal",
+          "citacao",
+          "trecho"
+        ],
+        "title": "ResultadoBusca"
+      },
+      "Saude": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "erro"
+            ],
+            "title": "Status"
+          },
+          "banco": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "erro"
+            ],
+            "title": "Banco"
+          },
+          "versao": {
+            "type": "string",
+            "title": "Versao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "banco",
+          "versao"
+        ],
+        "title": "Saude"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

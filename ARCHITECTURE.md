@@ -18,6 +18,8 @@
 >
 > **Revisão 9 (24/10/2026)**: Fase 3 sem dados reais: abstração de embeddings, fatiamento e ferramenta de avaliação (seção 7.5); dependências de modelo num grupo opcional.
 >
+> **Revisão 10 (27/10/2026)**: contrato da API (seção 10.1), com mock para o frontend, e detecção do número de processo na consulta (seção 8.2).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -680,6 +682,7 @@ flowchart TD
 - Se a consulta contiver um número **e** outros termos → o número vira filtro e o restante segue para a busca híbrida.
 - Número parcial (ex.: `0011412-20.2025`) → busca por prefixo dos dígitos, limitada.
 - Endpoint dedicado `GET /api/v1/processos/{numero}` para links diretos.
+- Implementação (`buscajus.api.consulta`): a consulta é normalizada (NFC, sem caracteres de controle, espaços simples, até 500 caracteres). Um número completo pode vir com a máscara inteira, parcial ou sem nenhuma; um prefixo exige a máscara a partir de `NNNNNNN-DD` (só 7 dígitos seria ambíguo). Palavras como "processo", "autos" e "nº" em volta do número não contam como texto. Número colado a outros dígitos não é número de processo; só o primeiro número da consulta é usado.
 
 ### 8.3 Ramo vetorial
 
@@ -771,6 +774,13 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 | `GET` | `/relatores?prefixo=` | Sugestão de relatores |
 | `POST` | `/remocao` | Pedido de remoção |
 | `GET` | `/saude` | Health check (DB + modelo carregado) |
+
+### 10.1 Contrato (F4-01)
+
+- Esquemas em `buscajus.api.esquemas`; o OpenAPI fica versionado em `frontend/openapi.json` (gerado por `buscajus api openapi`), e um teste falha se o contrato mudar sem regenerar o arquivo. O frontend gera os tipos a partir dele (F5-01).
+- Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`, 422 `consulta_vazia`/`numero_invalido`, 501 `nao_implementado`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
+- `/busca` devolve `consulta` (normalizada), `tipo` (`hibrida` ou `processo`), `numero_processo` detectado, `filtros`, `pagina` (1 a 10), `por_pagina` (20), `total` (até 200) e `resultados`. O `trecho` é a ementa escapada, e o único HTML possível é `<mark>`.
+- Enquanto a busca não existe, as rotas (menos `/saude`) respondem 501. Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar antes da busca real.
 
 Item de resultado:
 

@@ -90,6 +90,11 @@ class ConfigTjdft(BaseModel):
     tentativas_integridade: int = Field(default=3, ge=1)
 
 
+class ConfigApi(BaseModel):
+    # Dados sintéticos fixos no formato do contrato, para o frontend antes da busca real.
+    mock: bool = False
+
+
 class ConfigEmbeddings(BaseModel):
     # Modelo ainda não fixado (F3-05/F3-06): nome no Hugging Face e revisão (commit).
     modelo: str | None = None
@@ -154,6 +159,7 @@ class Config(BaseSettings):
     http: ConfigHttp = ConfigHttp()
     anonimizacao: ConfigAnonimizacao = ConfigAnonimizacao()
     embeddings: ConfigEmbeddings = ConfigEmbeddings()
+    api: ConfigApi = ConfigApi()
     agendador: ConfigAgendador = ConfigAgendador()
     djen: ConfigDjen = ConfigDjen()
     tjdft: ConfigTjdft = ConfigTjdft()

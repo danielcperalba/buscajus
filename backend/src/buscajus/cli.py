@@ -8,6 +8,7 @@ Comandos:
 - ``buscajus ingest reprocessar --fonte djen [--tribunal T] --de AAAA-MM-DD --ate AAAA-MM-DD``
 - ``buscajus ingest verificar-versoes --tribunal T [--dias 30]``
 - ``buscajus ingest status [--fonte F] [--tribunal T] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]``
+- ``buscajus api openapi`` (imprime o contrato; versionado em ``frontend/openapi.json``)
 - ``buscajus eval pool --consultas ARQ --saida ARQ.csv [--modelo NOME[@REVISAO]]... [--k 20]``
 - ``buscajus eval metricas --consultas ARQ --julgamentos ARQ.csv [--modelo NOME[@REVISAO]]...``
 
@@ -105,6 +106,11 @@ def _parser() -> argparse.ArgumentParser:
     st.add_argument("--de", type=_data)
     st.add_argument("--ate", type=_data)
     st.set_defaults(executar=_status)
+
+    api = comandos.add_parser("api", help="contrato da API")
+    sub_api = api.add_subparsers(dest="subcomando", required=True)
+    openapi = sub_api.add_parser("openapi", help="imprime o OpenAPI em JSON")
+    openapi.set_defaults(executar=_openapi)
 
     avaliacao = comandos.add_parser("eval", help="avaliação da busca (F3-04)")
     sub_eval = avaliacao.add_subparsers(dest="subcomando", required=True)
@@ -278,6 +284,13 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _openapi(_args: argparse.Namespace) -> int:
+    from buscajus.api.app import criar_app, openapi_json
+
+    sys.stdout.write(openapi_json(criar_app()))
+    return 0
+
+
 def _sistemas(args: argparse.Namespace) -> tuple[list[Sistema], dict[str, str]]:
     """Índice temporário: um sistema vetorial por modelo, mais o full-text do Postgres."""
     config = obter_config()
@@ -325,7 +338,16 @@ def _eval_metricas(args: argparse.Namespace) -> int:
     return 0
 
 
+def _saidas_em_utf8() -> None:
+    """No Windows a saída padrão é cp1252 com CRLF; o resultado sai sempre em UTF-8 com LF."""
+    for fluxo in (sys.stdout, sys.stderr):
+        reconfigurar = getattr(fluxo, "reconfigure", None)
+        if reconfigurar is not None:
+            reconfigurar(encoding="utf-8", newline="\n")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _saidas_em_utf8()
     configurar_logging(obter_config().nivel_log)
     args = _parser().parse_args(argv)
     try:

@@ -93,6 +93,16 @@ uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-
 - O agendador do `worker` (DJEN: coleta diária e checagem de versões; TJDFT: dia mais recente, reconsulta do anterior e recoleta dos últimos 30 dias) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
 - A tabela de classes processuais (`classe_cnj`) vem da TPU do CNJ, num arquivo versionado. Para atualizá-la: `uv run python scripts/atualizar_tpu.py` (em `backend/`) e uma migração que chame `carregar_tpu`.
 
+### API
+
+```bash
+# Contrato da API (versionado em frontend/openapi.json; regenere quando os esquemas mudarem)
+uv run buscajus api openapi > ../frontend/openapi.json
+
+# API com dados sintéticos fixos, para o frontend antes da busca real
+BUSCAJUS_API__MOCK=true uv run uvicorn buscajus.api.app:criar_app --factory --reload
+```
+
 ### Avaliação da busca (Fase 3)
 
 ```bash
