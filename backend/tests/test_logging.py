@@ -28,3 +28,10 @@ def test_httpx_nao_registra_urls_em_info() -> None:
     configurar_logging("DEBUG")
     assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
     assert not logging.getLogger("httpcore").isEnabledFor(logging.INFO)
+
+
+def test_httpx2_tambem_nao_registra_urls_em_info() -> None:
+    # O huggingface-hub (grupo embeddings) usa o httpx2, que também registra URLs em INFO.
+    configurar_logging("DEBUG")
+    assert not logging.getLogger("httpx2").isEnabledFor(logging.INFO)
+    assert not logging.getLogger("httpcore2").isEnabledFor(logging.INFO)

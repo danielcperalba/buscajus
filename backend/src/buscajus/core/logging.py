@@ -42,7 +42,7 @@ def configurar_logging(nivel: str = "INFO") -> None:
     raiz.setLevel(nivel)
     # O log de acesso do uvicorn inclui a query string, que pode conter a busca do usuário.
     logging.getLogger("uvicorn.access").disabled = True
-    # O httpx registra cada requisição com a URL completa em INFO; a URL temporária do
-    # caderno do DJEN não pode chegar aos logs.
-    for nome in ("httpx", "httpcore"):
+    # O httpx (e o httpx2, usado pelo huggingface-hub) registra cada requisição com a URL
+    # completa em INFO; a URL temporária do caderno do DJEN não pode chegar aos logs.
+    for nome in ("httpx", "httpcore", "httpx2", "httpcore2"):
         logging.getLogger(nome).setLevel(logging.WARNING)

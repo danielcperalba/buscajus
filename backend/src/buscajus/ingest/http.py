@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 # O httpx registra cada requisição com a URL completa em INFO. Vale para qualquer processo
 # que use este cliente, mesmo sem configurar_logging.
-for _nome in ("httpx", "httpcore"):
+for _nome in ("httpx", "httpcore", "httpx2", "httpcore2"):
     logging.getLogger(_nome).setLevel(logging.WARNING)
 
 
