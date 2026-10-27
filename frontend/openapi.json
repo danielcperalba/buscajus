@@ -176,7 +176,7 @@
             },
             "description": "Unprocessable Entity"
           },
-          "501": {
+          "429": {
             "content": {
               "application/json": {
                 "schema": {
@@ -184,7 +184,7 @@
                 }
               }
             },
-            "description": "Not Implemented"
+            "description": "Too Many Requests"
           }
         }
       }
@@ -227,7 +227,7 @@
             },
             "description": "Not Found"
           },
-          "501": {
+          "429": {
             "content": {
               "application/json": {
                 "schema": {
@@ -235,7 +235,7 @@
                 }
               }
             },
-            "description": "Not Implemented"
+            "description": "Too Many Requests"
           },
           "410": {
             "content": {
@@ -308,7 +308,7 @@
             },
             "description": "Unprocessable Entity"
           },
-          "501": {
+          "429": {
             "content": {
               "application/json": {
                 "schema": {
@@ -316,7 +316,7 @@
                 }
               }
             },
-            "description": "Not Implemented"
+            "description": "Too Many Requests"
           }
         }
       }
@@ -336,8 +336,8 @@
               }
             }
           },
-          "501": {
-            "description": "Not Implemented",
+          "429": {
+            "description": "Too Many Requests",
             "content": {
               "application/json": {
                 "schema": {
@@ -381,7 +381,7 @@
               }
             }
           },
-          "501": {
+          "429": {
             "content": {
               "application/json": {
                 "schema": {
@@ -389,7 +389,7 @@
                 }
               }
             },
-            "description": "Not Implemented"
+            "description": "Too Many Requests"
           },
           "422": {
             "description": "Validation Error",
@@ -442,16 +442,6 @@
           },
           "429": {
             "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Erro"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not Implemented",
             "content": {
               "application/json": {
                 "schema": {

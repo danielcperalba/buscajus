@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from datetime import date
 from typing import Annotated, Literal
 
@@ -23,9 +24,11 @@ from buscajus.api.esquemas import (
     RemocaoRecebida,
     RespostaBusca,
 )
+from buscajus.api.limite import LimitadorJanela, ip_do_cliente, verificar
 from buscajus.api.mock import ServicoMock
-from buscajus.api.servico import ErroApi, ServicoBusca, ServicoIndisponivel
-from buscajus.core.config import obter_config
+from buscajus.api.servico import ErroApi, ServicoBusca
+from buscajus.busca.servico import ServicoPostgres
+from buscajus.core.config import Config, obter_config
 from buscajus.core.logging import configurar_logging
 from buscajus.db.engine import banco_disponivel, obter_engine
 
@@ -56,6 +59,21 @@ def obter_servico(request: Request) -> ServicoBusca:
 Servico = Annotated[ServicoBusca, Depends(obter_servico)]
 
 
+def _limite(nome: str) -> Callable[[Request], None]:
+    """Dependência que conta o pedido no limitador ``nome`` do IP do cliente (F4-13)."""
+
+    def verificar_limite(request: Request) -> None:
+        config: Config = request.app.state.config
+        ip = ip_do_cliente(request, confiar_x_forwarded_for=config.api.confiar_x_forwarded_for)
+        verificar(request.app.state.limitadores[nome], ip)
+
+    return verificar_limite
+
+
+LimiteConsulta = Depends(_limite("consulta"))
+LimiteRemocao = Depends(_limite("remocao"))
+
+
 @rotas.get("/saude")
 def saude(response: Response, engine: Annotated[Engine, Depends(obter_engine)]) -> Saude:
     banco: Estado = "ok" if banco_disponivel(engine) else "erro"
@@ -64,7 +82,7 @@ def saude(response: Response, engine: Annotated[Engine, Depends(obter_engine)]) 
     return Saude(status=banco, banco=banco, versao=__version__)
 
 
-@rotas.get("/busca", responses=_erros(422, 501))
+@rotas.get("/busca", responses=_erros(422, 429), dependencies=[LimiteConsulta])
 def buscar(
     servico: Servico,
     q: Annotated[str, Query(min_length=1, max_length=MAXIMO_CONSULTA * 2)],
@@ -80,6 +98,8 @@ def buscar(
     consulta = analisar_consulta(q)
     if not consulta.original:
         raise ErroApi(422, "consulta_vazia", "informe o que procurar")
+    if data_inicio and data_fim and data_inicio > data_fim:
+        raise ErroApi(422, "periodo_invalido", "data_inicio depois de data_fim")
     filtros = FiltrosBusca(
         tribunal=tribunal,
         orgao=orgao,
@@ -93,7 +113,8 @@ def buscar(
 
 @rotas.get(
     "/acordaos/{acordao_id}",
-    responses={**_erros(404, 501), 410: {"model": Indisponivel}},
+    responses={**_erros(404, 429), 410: {"model": Indisponivel}},
+    dependencies=[LimiteConsulta],
 )
 def detalhe(servico: Servico, acordao_id: Annotated[int, Path(ge=1)]) -> DetalheAcordao:
     """Detalhe; 410 para cancelado ou removido, 404 para inexistente ou em quarentena."""
@@ -105,7 +126,7 @@ def detalhe(servico: Servico, acordao_id: Annotated[int, Path(ge=1)]) -> Detalhe
     return resultado
 
 
-@rotas.get("/processos/{numero}", responses=_erros(404, 422, 501))
+@rotas.get("/processos/{numero}", responses=_erros(404, 422, 429), dependencies=[LimiteConsulta])
 def processo(servico: Servico, numero: Annotated[str, Path(max_length=40)]) -> AcordaosDoProcesso:
     """Acórdãos de um processo, com ou sem máscara (prefixo a partir de NNNNNNN-DD)."""
     digitos = "".join(c for c in numero if c.isdigit())
@@ -117,19 +138,19 @@ def processo(servico: Servico, numero: Annotated[str, Path(max_length=40)]) -> A
     return resultado
 
 
-@rotas.get("/filtros", responses=_erros(501))
+@rotas.get("/filtros", responses=_erros(429), dependencies=[LimiteConsulta])
 def filtros(servico: Servico) -> Filtros:
     return servico.filtros()
 
 
-@rotas.get("/relatores", responses=_erros(501))
+@rotas.get("/relatores", responses=_erros(429), dependencies=[LimiteConsulta])
 def relatores(
     servico: Servico, prefixo: Annotated[str, Query(min_length=2, max_length=100)]
 ) -> list[Relator]:
     return servico.relatores(prefixo)
 
 
-@rotas.post("/remocao", status_code=201, responses=_erros(422, 429, 501))
+@rotas.post("/remocao", status_code=201, responses=_erros(422, 429), dependencies=[LimiteRemocao])
 def remocao(servico: Servico, pedido: PedidoRemocao) -> RemocaoRecebida:
     """Pedido de remoção (canal da seção 6.5)."""
     return servico.registrar_remocao(pedido)
@@ -149,12 +170,19 @@ def criar_app() -> FastAPI:
     config = obter_config()
     configurar_logging(config.nivel_log)
     app = FastAPI(title="BuscaJus", version=__version__)
-    app.state.servico = ServicoMock() if config.api.mock else ServicoIndisponivel()
+    app.state.config = config
+    app.state.servico = (
+        ServicoMock() if config.api.mock else ServicoPostgres(obter_engine(), config.busca)
+    )
+    app.state.limitadores = {
+        "consulta": LimitadorJanela(config.api.consultas_por_minuto, 60),
+        "remocao": LimitadorJanela(config.api.remocoes_por_hora, 3600),
+    }
 
     @app.exception_handler(ErroApi)
     def _erro_api(_request: Request, exc: ErroApi) -> JSONResponse:
         corpo = Erro(erro=exc.erro, mensagem=exc.mensagem)
-        return JSONResponse(corpo.model_dump(), status_code=exc.status)
+        return JSONResponse(corpo.model_dump(), status_code=exc.status, headers=exc.cabecalhos)
 
     @app.exception_handler(_Indisponivel)
     def _indisponivel(_request: Request, exc: _Indisponivel) -> JSONResponse:

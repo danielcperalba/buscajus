@@ -93,6 +93,27 @@ class ConfigTjdft(BaseModel):
 class ConfigApi(BaseModel):
     # Dados sintéticos fixos no formato do contrato, para o frontend antes da busca real.
     mock: bool = False
+    # Limite de taxa por IP (F4-13): consultas (busca, detalhe, processo, filtros, relatores)
+    # e pedidos de remoção, em janelas deslizantes.
+    consultas_por_minuto: int = Field(default=60, ge=1)
+    remocoes_por_hora: int = Field(default=5, ge=1)
+    # Atrás de um proxy reverso (Caddy), o IP do cliente vem de X-Forwarded-For.
+    confiar_x_forwarded_for: bool = False
+    # Dias que o e-mail de quem pediu a remoção fica guardado depois da resolução (seção 6.5).
+    retencao_contato_dias: int = Field(default=90, ge=0)
+
+
+class ConfigBusca(BaseModel):
+    # Fusão RRF (seção 8.5): k e pesos dos ramos, ajustados no conjunto de avaliação (F6-07).
+    rrf_k: float = Field(default=60, gt=0)
+    peso_vetor: float = Field(default=1.0, ge=0)
+    peso_texto: float = Field(default=1.0, ge=0)
+    # Resultados por ramo antes da fusão.
+    top_ramo: int = Field(default=100, ge=1)
+    # Busca por prefixo do número do processo: no máximo este número de acórdãos.
+    limite_prefixo: int = Field(default=50, ge=1)
+    # Cache dos valores de /filtros.
+    cache_filtros_segundos: float = Field(default=300, ge=0)
 
 
 class ConfigEmbeddings(BaseModel):
@@ -160,6 +181,7 @@ class Config(BaseSettings):
     anonimizacao: ConfigAnonimizacao = ConfigAnonimizacao()
     embeddings: ConfigEmbeddings = ConfigEmbeddings()
     api: ConfigApi = ConfigApi()
+    busca: ConfigBusca = ConfigBusca()
     agendador: ConfigAgendador = ConfigAgendador()
     djen: ConfigDjen = ConfigDjen()
     tjdft: ConfigTjdft = ConfigTjdft()

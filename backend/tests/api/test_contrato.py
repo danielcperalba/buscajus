@@ -1,4 +1,4 @@
-"""Contrato da API (F4-01): OpenAPI versionado, 501 sem busca e respostas do mock."""
+"""Contrato da API (F4-01): OpenAPI versionado e respostas do mock."""
 
 import subprocess
 import sys
@@ -19,11 +19,6 @@ def mock(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(modulo_app.criar_app())
 
 
-@pytest.fixture
-def sem_busca() -> TestClient:
-    return TestClient(modulo_app.criar_app())
-
-
 def test_openapi_versionado_esta_em_dia() -> None:
     atual = modulo_app.openapi_json(modulo_app.criar_app())
     assert OPENAPI.read_text(encoding="utf-8") == atual, (
@@ -39,25 +34,6 @@ def test_cli_imprime_so_o_openapi() -> None:
     )
     # Bytes: UTF-8 e LF também no Windows (o arquivo é gerado por redirecionamento).
     assert saida.stdout == OPENAPI.read_bytes()
-
-
-@pytest.mark.parametrize(
-    ("metodo", "rota"),
-    [
-        ("get", "/api/v1/busca?q=heranca"),
-        ("get", "/api/v1/acordaos/1"),
-        ("get", "/api/v1/processos/0011412-20.2099"),
-        ("get", "/api/v1/filtros"),
-        ("get", "/api/v1/relatores?prefixo=ful"),
-    ],
-)
-def test_sem_busca_responde_501(sem_busca: TestClient, metodo: str, rota: str) -> None:
-    resposta = getattr(sem_busca, metodo)(rota)
-    assert resposta.status_code == 501
-    assert resposta.json() == {
-        "erro": "nao_implementado",
-        "mensagem": "a busca ainda não está disponível",
-    }
 
 
 def test_busca_hibrida_com_destaque(mock: TestClient) -> None:
