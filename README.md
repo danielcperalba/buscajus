@@ -136,9 +136,14 @@ uv run buscajus eval metricas --consultas eval/consultas.yaml --julgamentos julg
 ```bash
 cd frontend
 pnpm install
-pnpm dev
+pnpm dev            # usa a API em API_URL (padrão: http://127.0.0.1:8000)
+pnpm test           # Vitest + Testing Library
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm build
 ```
+
+- Sem banco: suba a API em modo mock (`BUSCAJUS_API__MOCK=true`, seção API acima) e rode `pnpm dev`.
+- Os tipos da API vêm de `openapi.json`. Quando o contrato mudar: `uv run buscajus api openapi > ../frontend/openapi.json` em `backend/` e `pnpm api:gerar` aqui; o build falha se os tipos estiverem desatualizados.
+- Dependências novas só entram com 14 dias de publicação (`minimumReleaseAge` em `pnpm-workspace.yaml`).
 
 ### Pre-commit
 

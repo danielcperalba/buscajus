@@ -831,6 +831,16 @@ Item de resultado:
 - Acessibilidade (WCAG AA), responsivo, sem rastreadores de terceiros.
 - Consome a API pelo OpenAPI gerado (tipos TypeScript gerados a partir do schema).
 
+### 11.1 Implementação (Bloco O)
+
+- **Dados no servidor**: as páginas chamam a API no servidor do Next.js (`src/api/cliente.ts`, `openapi-fetch` com os tipos gerados), em `API_URL`, lida em tempo de execução. O navegador não fala com a API; a única exceção, a sugestão de relator, passa por um route handler do próprio site (`/api/relatores`).
+- **IP do usuário**: o Next.js repassa `X-Forwarded-For` (do proxy reverso) à API, para o limite de taxa valer por pessoa, e não para o servidor do Next.js inteiro. Por isso a `api` do Compose roda com `api.confiar_x_forwarded_for = true`; ela só é publicada em `127.0.0.1` e só recebe chamadas do `web`.
+- **Busca**: formulário GET (`next/form`); a URL é o estado (`/busca?q=…&tribunal=…&pagina=…`) e tudo funciona sem JavaScript. Com `cacheComponents`, o que lê `searchParams` fica num `Suspense`: a página é um prerender parcial, com os resultados em streaming.
+- **Trecho**: a API manda o texto escapado com `<mark>`; o frontend ainda troca qualquer `<` que não seja de `<mark>`/`</mark>` antes de inserir o HTML.
+- **Contrato**: `pnpm build` confere se `src/api/esquema.ts` corresponde a `frontend/openapi.json` (`pnpm api:gerar` regenera).
+- **Testes**: Vitest + Testing Library (`pnpm test`), com dados sintéticos; componentes assíncronos de servidor ficam para os testes E2E (F6-09).
+- **Dependências**: o pnpm só instala versões publicadas há pelo menos 14 dias (`minimumReleaseAge`); as versões que já estavam no lockfile antes da regra estão listadas em `minimumReleaseAgeExclude`.
+
 ---
 
 ## 12. Infraestrutura
