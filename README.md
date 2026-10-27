@@ -141,6 +141,7 @@ pnpm test           # Vitest + Testing Library
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm build
 ```
 
+- `CONTATO_EMAIL` (opcional): e-mail do projeto exibido como texto na página de remoção.
 - Sem banco: suba a API em modo mock (`BUSCAJUS_API__MOCK=true`, seção API acima) e rode `pnpm dev`.
 - Os tipos da API vêm de `openapi.json`. Quando o contrato mudar: `uv run buscajus api openapi > ../frontend/openapi.json` em `backend/` e `pnpm api:gerar` aqui; o build falha se os tipos estiverem desatualizados.
 - Dependências novas só entram com 14 dias de publicação (`minimumReleaseAge` em `pnpm-workspace.yaml`).

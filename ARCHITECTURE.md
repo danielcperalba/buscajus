@@ -841,6 +841,14 @@ Item de resultado:
 - **Testes**: Vitest + Testing Library (`pnpm test`), com dados sintéticos; componentes assíncronos de servidor ficam para os testes E2E (F6-09).
 - **Dependências**: o pnpm só instala versões publicadas há pelo menos 14 dias (`minimumReleaseAge`); as versões que já estavam no lockfile antes da regra estão listadas em `minimumReleaseAgeExclude`.
 
+### 11.2 Implementação (Bloco P)
+
+- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. O 410 da API vira a página de publicação cancelada (com o link oficial) ou de acórdão removido. Inexistente → página de não encontrado; como o conteúdo vem em streaming (prerender parcial), o status HTTP fica 200, com `noindex`.
+- **Processo** (`/processo/[numero]`): número com ou sem máscara, ou prefixo; cartões do mais recente ao mais antigo.
+- **Remoção** (`/remocao`): server action que chama `POST /api/v1/remocao` no servidor; funciona sem JavaScript. `?referencia=` vem preenchido a partir do detalhe. O e-mail de contato do projeto aparece como texto quando `CONTATO_EMAIL` está configurado no `web`.
+- **Institucionais**: `/sobre` e `/privacidade` são rascunhos pendentes de revisão (F5-10); a cobertura por tribunal e período passa a vir da base no F7-04.
+- **Acessibilidade**: axe-core nos testes (sem violações sérias ou críticas nas páginas e componentes síncronos); o contraste vem dos tokens de cor, porque o jsdom não o mede.
+
 ---
 
 ## 12. Infraestrutura
