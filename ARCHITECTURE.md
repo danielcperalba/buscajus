@@ -22,6 +22,8 @@
 >
 > **Revisão 11 (27/10/2026)**: busca implementada com dados sintéticos (seção 8.8), ramo vetorial atrás de uma interface e desligado até o F3-06; limite de taxa e canal de remoção na API (seções 6.5 e 10.1); liberação de bloqueio só manual (seção 4.5).
 >
+> **Revisão 12 (27/10/2026)**: correção de segurança do IP do cliente no limite de taxa e requisito de implantação (seções 10.1 e 12.2); 404/410 reais no detalhe do acórdão (seção 11.2); Fase 6 com dados sintéticos e Fase 7 sem fontes novas (ajustes por tribunal, perfis de parser, registro de fontes, prioridade configurável, senha padrão recusada em produção).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -294,7 +296,7 @@ O orquestrador (`ingest.runner`) é genérico: persiste o estado das unidades, a
 ### 3.5 Deduplicação entre fontes
 
 - Dentro de uma fonte: chave única `(fonte, id_fonte)`.
-- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda (F2-09), o upsert verifica se já existe acórdão **ativo** de **outra fonte** com o mesmo `numero_processo` e a mesma `data_referencia` (data de julgamento ou, na falta dela, de publicação/disponibilização). Prioridade de fonte: API própria do tribunal > DJEN (`ingest.upsert.PRIORIDADE_FONTE`). O de menor prioridade fica `duplicado`, com `duplicata_de` apontando para o outro, e não é indexado, seja ele o novo (o DJEN que chega depois do TJDFT) ou o que já estava no banco (o TJDFT que chega depois marca o DJEN). Só um acórdão `ativo` torna o outro duplicado: um TJDFT em quarentena não esconde o DJEN.
+- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda (F2-09), o upsert verifica se já existe acórdão **ativo** de **outra fonte** com o mesmo `numero_processo` e a mesma `data_referencia` (data de julgamento ou, na falta dela, de publicação/disponibilização). Prioridade de fonte: API própria do tribunal > DJEN (`ingest.upsert.ORDEM_PADRAO`), configurável por tribunal em `prioridade_fontes` (F7-05). O de menor prioridade fica `duplicado`, com `duplicata_de` apontando para o outro, e não é indexado, seja ele o novo (o DJEN que chega depois do TJDFT) ou o que já estava no banco (o TJDFT que chega depois marca o DJEN). Só um acórdão `ativo` torna o outro duplicado: um TJDFT em quarentena não esconde o DJEN.
 
 ---
 
@@ -476,7 +478,7 @@ Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha
 
 O `texto` é HTML com entidades (`&Atilde;`, `&ccedil;`, `&nbsp;`…), contendo uma tabela de cabeçalho com **Processo**, **Relator(a)** e **Data do Julgamento**, seguida da ementa. A data de julgamento estava presente em 100% dos 1.536 acórdãos do caderno TJPR de 15/10/2026. O parser recebe o `texto` já anonimizado (seção 6.3).
 
-Etapas (`ingest.djen.parser`, com `versao_parser` registrada):
+Etapas (`ingest.djen.parser`, com `versao_parser` registrada). As variações de HTML entre tribunais ficam num `PerfilParser` (rótulos do cabeçalho e tamanho mínimo da ementa), escolhido pela sigla do tribunal; o do TJPR é o padrão (F7-02):
 
 1. **Decodificação**: `html.unescape` (cobre entidades nomeadas e numéricas); trata entidades duplamente escapadas (`&amp;Atilde;`) com uma segunda passada condicional.
 2. **Parsing**: `lxml.html`, tolerante a HTML malformado.
@@ -795,7 +797,9 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 - Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`; 422 `consulta_vazia`, `periodo_invalido`, `numero_invalido`, `referencia_invalida`; 429 `limite_excedido`, com `Retry-After`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
 - `/busca` devolve `consulta` (normalizada), `tipo` (`hibrida` ou `processo`), `numero_processo` detectado, `filtros`, `pagina` (1 a 10), `por_pagina` (20), `total` (até 200) e `resultados`. O `trecho` é a ementa escapada, e o único HTML possível é `<mark>`.
 - O serviço real é `busca.servico.ServicoPostgres` (seção 8.8). Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar sem banco.
-- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, detalhe, processo, filtros e relatores, e `api.remocoes_por_hora` (5) para a remoção. Atrás do proxy reverso, `api.confiar_x_forwarded_for = true`. A contagem é por processo da API; com vários processos, cada um conta o seu.
+- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, detalhe, processo, filtros, relatores e cobertura, e `api.remocoes_por_hora` (5) para a remoção. A contagem é por processo da API; com vários processos, cada um conta o seu. No máximo `api.max_ips_limitador` (100 mil) IPs são acompanhados; acima disso, os menos recentes são descartados.
+- **IP do cliente**: com `api.proxies_confiaveis = N > 0`, é o N-ésimo item **a partir da direita** do `X-Forwarded-For` (o que os nossos proxies acrescentaram); os itens à esquerda vêm do cliente e podem ser falsificados. Com 0, ou com o cabeçalho ausente, curto ou malformado, vale o IP da conexão. Requisito de implantação na seção 12.2.
+- `GET /acordaos/{id}/situacao` devolve só a situação (`ativo`, `cancelado`, `removido`; 404 para o resto), sem o texto e fora do limite de taxa: o site a usa para responder 404/410 antes de renderizar.
 
 Item de resultado:
 
@@ -834,7 +838,7 @@ Item de resultado:
 ### 11.1 Implementação (Bloco O)
 
 - **Dados no servidor**: as páginas chamam a API no servidor do Next.js (`src/api/cliente.ts`, `openapi-fetch` com os tipos gerados), em `API_URL`, lida em tempo de execução. O navegador não fala com a API; a única exceção, a sugestão de relator, passa por um route handler do próprio site (`/api/relatores`).
-- **IP do usuário**: o Next.js repassa `X-Forwarded-For` (do proxy reverso) à API, para o limite de taxa valer por pessoa, e não para o servidor do Next.js inteiro. Por isso a `api` do Compose roda com `api.confiar_x_forwarded_for = true`; ela só é publicada em `127.0.0.1` e só recebe chamadas do `web`.
+- **IP do usuário**: o Next.js repassa à API **só o último item** do `X-Forwarded-For` recebido, o que o proxy reverso (Caddy) acrescentou; nunca a lista inteira, cujos itens anteriores vêm do cliente. A API conta 1 proxy confiável (`api.proxies_confiaveis = 1` em produção). Requisito de implantação na seção 12.2.
 - **Busca**: formulário GET (`next/form`); a URL é o estado (`/busca?q=…&tribunal=…&pagina=…`) e tudo funciona sem JavaScript. Com `cacheComponents`, o que lê `searchParams` fica num `Suspense`: a página é um prerender parcial, com os resultados em streaming.
 - **Trecho**: a API manda o texto escapado com `<mark>`; o frontend ainda troca qualquer `<` que não seja de `<mark>`/`</mark>` antes de inserir o HTML.
 - **Contrato**: `pnpm build` confere se `src/api/esquema.ts` corresponde a `frontend/openapi.json` (`pnpm api:gerar` regenera).
@@ -843,7 +847,7 @@ Item de resultado:
 
 ### 11.2 Implementação (Bloco P)
 
-- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. O 410 da API vira a página de publicação cancelada (com o link oficial) ou de acórdão removido. Inexistente → página de não encontrado; como o conteúdo vem em streaming (prerender parcial), o status HTTP fica 200, com `noindex`.
+- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. Como o conteúdo vem em streaming (prerender parcial), o status HTTP sairia sempre 200; por isso um Proxy do Next (`src/proxy.ts`), restrito a `/acordao/:id`, consulta `GET /acordaos/{id}/situacao` antes de renderizar. Inexistente (ou id inválido) → HTML de `/nao-encontrado` com **404**; cancelado ou removido → a página de aviso (com o link oficial, se cancelado) com **410**; ativo, ou API fora do ar → segue normalmente. Navegações internas do roteador (cabeçalho `RSC`) e Server Actions não passam pela conferência.
 - **Processo** (`/processo/[numero]`): número com ou sem máscara, ou prefixo; cartões do mais recente ao mais antigo.
 - **Remoção** (`/remocao`): server action que chama `POST /api/v1/remocao` no servidor; funciona sem JavaScript. `?referencia=` vem preenchido a partir do detalhe. O e-mail de contato do projeto aparece como texto quando `CONTATO_EMAIL` está configurado no `web`.
 - **Institucionais**: `/sobre` e `/privacidade` são rascunhos pendentes de revisão (F5-10); a cobertura por tribunal e período passa a vir da base no F7-04.
@@ -870,7 +874,15 @@ Configuração por variáveis de ambiente (`.env`, com `.env.example` versionado
 
 ### 12.2 Produção do MVP
 
-Um único servidor próprio ou VPS de baixo custo (ex.: 4 vCPU, 8–16 GB de RAM, SSD), rodando o mesmo Compose com proxy reverso (Caddy, TLS automático). Backups diários do Postgres (`pg_dump` comprimido) para outro disco ou host. Sem serviços gerenciados pagos.
+Um único servidor próprio ou VPS de baixo custo (ex.: 4 vCPU, 8–16 GB de RAM, SSD), rodando o mesmo Compose com proxy reverso (Caddy, TLS automático). Backups diários do Postgres (`ops/backup.sh`, docs/backup.md) para outro disco ou host. Sem serviços gerenciados pagos.
+
+**Requisito de implantação (limite de taxa por IP)**:
+
+- Só o proxy reverso (Caddy) é exposto à internet. O Next.js (`web`) e a API (`api`) **não** podem ser acessíveis diretamente: ficam numa rede interna do Compose, sem portas publicadas no host (ou publicadas só em `127.0.0.1`).
+- O Caddy define o `X-Forwarded-For` com o IP real do cliente. Substituindo o cabeçalho recebido ou acrescentando ao fim dele, o último item é sempre o que o Caddy pôs (o IP da conexão), e é só esse item que o Next repassa à API. Não configure `trusted_proxies` no Caddy, a não ser que haja outro proxy nosso à frente dele (e então ajuste `proxies_confiaveis`).
+- Na API: `BUSCAJUS_API__PROXIES_CONFIAVEIS=1` em produção. No Compose de desenvolvimento, sem proxy, `0` (vale o IP da conexão, e todos os usuários locais dividem o limite).
+- Se o Next ou a API ficassem expostos, um cliente poderia mandar o próprio `X-Forwarded-For` e escapar do limite. Por isso a regra acima é obrigatória.
+- `BUSCAJUS_AMBIENTE=producao`: a configuração recusa a senha padrão de desenvolvimento do banco (F7-09).
 
 Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; vetores 768-d ~0,8–1,1 GB + HNSW de tamanho similar; brutos filtrados na casa de centenas de MB. Tráfego do DJEN: ~57–163 MB/dia por tribunal (F1-01), mais os cadernos rebaixados por mudança de versão.
 

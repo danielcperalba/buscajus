@@ -139,12 +139,27 @@ pnpm install
 pnpm dev            # usa a API em API_URL (padrão: http://127.0.0.1:8000)
 pnpm test           # Vitest + Testing Library
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm build
+pnpm exec playwright install chromium   # uma vez
+pnpm e2e            # Playwright: sobe a API mock (porta 8100) e o site construído (3100)
 ```
 
 - `CONTATO_EMAIL` (opcional): e-mail do projeto exibido como texto na página de remoção.
 - Sem banco: suba a API em modo mock (`BUSCAJUS_API__MOCK=true`, seção API acima) e rode `pnpm dev`.
 - Os tipos da API vêm de `openapi.json`. Quando o contrato mudar: `uv run buscajus api openapi > ../frontend/openapi.json` em `backend/` e `pnpm api:gerar` aqui; o build falha se os tipos estiverem desatualizados.
 - Dependências novas só entram com 14 dias de publicação (`minimumReleaseAge` em `pnpm-workspace.yaml`).
+
+### Backup e restauração
+
+```bash
+ops/backup.sh /caminho/dos/backups          # pg_dump dentro do contêiner db, com retenção
+ops/restaurar.sh arquivo.dump [banco]       # restaura num banco separado e mostra contagens
+```
+
+Procedimento e teste de restauração em [docs/backup.md](docs/backup.md).
+
+### Produção
+
+Só o proxy reverso (Caddy) fica exposto; `web` e `api` não. Na API, `BUSCAJUS_API__PROXIES_CONFIAVEIS=1` e `BUSCAJUS_AMBIENTE=producao` (que recusa a senha padrão do banco). Detalhes no ARCHITECTURE.md, seção 12.2.
 
 ### Pre-commit
 

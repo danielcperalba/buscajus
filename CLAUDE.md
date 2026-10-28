@@ -31,6 +31,6 @@ trazem nomes de partes, advogados, vítimas e testemunhas.
   cadernos), nunca direto no Windows: lá a permissão `0700` da área temporária não se aplica.
 - Versões fixadas: Python 3.12 e uv 0.13.4 (backend), Node 24 e pnpm 12.3.4 (frontend).
 - Checagens do CI: em `backend/`, `uv run ruff format --check .`, `uv run ruff check .`,
-  `uv run mypy`, `uv run pytest`; em `frontend/`, `pnpm lint`, `pnpm typecheck`,
-  `pnpm format:check`, `pnpm test`, `pnpm build`. Testes de banco exigem `BUSCAJUS_TEST_DATABASE_URL`
+  `uv run mypy`, `uv run pytest --cov` (piso de 90% nos conectores); em `frontend/`, `pnpm lint`, `pnpm typecheck`,
+  `pnpm format:check`, `pnpm test`, `pnpm build` e, com o build pronto, `pnpm e2e` (Playwright contra a API mock). Testes de banco exigem `BUSCAJUS_TEST_DATABASE_URL`
   apontando para `127.0.0.1` (não `localhost`; ver README).
