@@ -426,3 +426,16 @@ textarea {
 [aria-invalid="true"] {
   border-color: var(--erro);
 }
+
+.cobertura {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.cobertura th,
+.cobertura td {
+  border-bottom: 1px solid var(--borda);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}

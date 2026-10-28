@@ -260,6 +260,57 @@
         }
       }
     },
+    "/api/v1/acordaos/{acordao_id}/situacao": {
+      "get": {
+        "summary": "Situacao",
+        "description": "Só a situação, sem o conteúdo: o site a usa para responder 404/410 antes de renderizar.\n\nFora do limite de taxa (é uma consulta por chave primária e não devolve texto), para que\nabrir um acórdão não conte duas vezes.",
+        "operationId": "situacao_api_v1_acordaos__acordao_id__situacao_get",
+        "parameters": [
+          {
+            "name": "acordao_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Acordao Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituacaoAcordao"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/processos/{numero}": {
       "get": {
         "summary": "Processo",
@@ -332,6 +383,39 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Filtros"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cobertura": {
+      "get": {
+        "summary": "Cobertura",
+        "description": "Acórdãos e período cobertos por fonte e tribunal (F7-04; página /sobre).",
+        "operationId": "cobertura_api_v1_cobertura_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CoberturaTribunal"
+                  },
+                  "type": "array",
+                  "title": "Response Cobertura Api V1 Cobertura Get"
                 }
               }
             }
@@ -512,6 +596,71 @@
           "nome"
         ],
         "title": "Classe"
+      },
+      "CoberturaTribunal": {
+        "properties": {
+          "fonte": {
+            "type": "string",
+            "enum": [
+              "djen",
+              "tjdft"
+            ],
+            "title": "Fonte"
+          },
+          "fonte_nome": {
+            "type": "string",
+            "title": "Fonte Nome"
+          },
+          "fonte_url": {
+            "type": "string",
+            "title": "Fonte Url"
+          },
+          "tribunal": {
+            "type": "string",
+            "title": "Tribunal"
+          },
+          "acordaos": {
+            "type": "integer",
+            "title": "Acordaos"
+          },
+          "desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desde"
+          },
+          "ate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fonte",
+          "fonte_nome",
+          "fonte_url",
+          "tribunal",
+          "acordaos",
+          "desde",
+          "ate"
+        ],
+        "title": "CoberturaTribunal",
+        "description": "Acórdãos exibíveis de uma fonte e tribunal, e o período (data de referência)."
       },
       "DetalheAcordao": {
         "properties": {
@@ -1248,6 +1397,26 @@
           "versao"
         ],
         "title": "Saude"
+      },
+      "SituacaoAcordao": {
+        "properties": {
+          "situacao": {
+            "type": "string",
+            "enum": [
+              "ativo",
+              "cancelado",
+              "removido"
+            ],
+            "title": "Situacao"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "situacao"
+        ],
+        "title": "SituacaoAcordao",
+        "description": "Situação exibível de um acórdão, sem o conteúdo (para o site responder 404/410 cedo)."
       },
       "ValidationError": {
         "properties": {

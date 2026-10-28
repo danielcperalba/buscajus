@@ -16,6 +16,9 @@ import { type EstadoPedido, validarPedido } from "@/lib/remocao";
 import { violacoesGraves } from "@/testes/axe";
 import { RESULTADO_DJEN, RESULTADO_TJDFT } from "@/testes/dados";
 
+// Componente assíncrono de servidor (lê a API): fora do escopo do jsdom; o E2E cobre.
+vi.mock("@/componentes/Cobertura", () => ({ Cobertura: () => <p>cobertura</p> }));
+
 vi.mock("next/form", () => ({
   default: (props: React.FormHTMLAttributes<HTMLFormElement>) => <form {...props} />,
 }));

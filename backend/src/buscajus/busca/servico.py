@@ -26,6 +26,7 @@ from buscajus.api.esquemas import (
     POR_PAGINA,
     AcordaosDoProcesso,
     Classe,
+    CoberturaTribunal,
     DetalheAcordao,
     Filtros,
     FiltrosBusca,
@@ -36,6 +37,7 @@ from buscajus.api.esquemas import (
     RemocaoRecebida,
     RespostaBusca,
     ResultadoBusca,
+    SituacaoAcordao,
 )
 from buscajus.api.servico import ErroApi
 from buscajus.busca.citacao import citar
@@ -44,6 +46,7 @@ from buscajus.busca.fusao import pagina, rrf
 from buscajus.busca.texto import destaques, inicio_da_ementa, ramo_texto
 from buscajus.busca.vetorial import RamoVetorial, RamoVetorialDesligado
 from buscajus.core.config import ConfigBusca
+from buscajus.ingest.fontes import FONTES
 from buscajus.ingest.texto import chave
 
 COLUNAS = """
@@ -203,6 +206,15 @@ class ServicoPostgres:
             possui_inteiro_teor=dados["possui_inteiro_teor"],
         )
 
+    def situacao(self, acordao_id: int) -> SituacaoAcordao | None:
+        with self._engine.connect() as conexao:
+            situacao = conexao.scalar(
+                text("SELECT situacao::text FROM acordao WHERE id = :id"), {"id": acordao_id}
+            )
+        if situacao in ("ativo", "cancelado", "removido"):
+            return SituacaoAcordao(situacao=situacao)
+        return None  # inexistente, quarentena ou duplicado
+
     # --- /processos/{numero} (F4-03) -----------------------------------------------
 
     def processo(self, digitos: str) -> AcordaosDoProcesso | None:
@@ -232,6 +244,30 @@ class ServicoPostgres:
             )
         self._cache_filtros = (agora, filtros)
         return filtros
+
+    def cobertura(self) -> list[CoberturaTribunal]:
+        """Cobertura por fonte e tribunal, só dos acórdãos exibíveis (F7-04)."""
+        with self._engine.connect() as conexao:
+            linhas = conexao.execute(
+                text("""
+                    SELECT fonte::text AS fonte, tribunal, count(*) AS acordaos,
+                        min(data_referencia) AS desde, max(data_referencia) AS ate
+                    FROM acordao WHERE situacao = 'ativo'
+                    GROUP BY fonte, tribunal ORDER BY tribunal, fonte
+                """)
+            ).all()
+        return [
+            CoberturaTribunal(
+                fonte=linha.fonte,
+                fonte_nome=FONTES[linha.fonte].nome,
+                fonte_url=FONTES[linha.fonte].url,
+                tribunal=linha.tribunal,
+                acordaos=linha.acordaos,
+                desde=linha.desde,
+                ate=linha.ate,
+            )
+            for linha in linhas
+        ]
 
     def relatores(self, prefixo: str, limite: int = 10) -> list[Relator]:
         alvo = chave(prefixo)

@@ -41,9 +41,9 @@ services:
     <<: *backend
     environment:
       <<: *backend-env
-      # Só o web chama a API (porta publicada só em 127.0.0.1); ele repassa o IP do usuário
-      # em X-Forwarded-For para o limite de taxa valer por pessoa.
-      BUSCAJUS_API__CONFIAR_X_FORWARDED_FOR: "true"
+      # Desenvolvimento, sem proxy reverso: o X-Forwarded-For é ignorado e vale o IP da
+      # conexão. Em produção, atrás do Caddy, 1 (ARCHITECTURE.md, seção 12.2).
+      BUSCAJUS_API__PROXIES_CONFIAVEIS: "0"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

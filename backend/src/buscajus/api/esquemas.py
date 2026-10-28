@@ -34,6 +34,12 @@ class Indisponivel(Esquema):
     )
 
 
+class SituacaoAcordao(Esquema):
+    """Situação exibível de um acórdão, sem o conteúdo (para o site responder 404/410 cedo)."""
+
+    situacao: Literal["ativo", "cancelado", "removido"]
+
+
 class Classe(Esquema):
     codigo: int | None = Field(description="Código da classe na TPU do CNJ")
     nome: str | None
@@ -113,6 +119,18 @@ class Filtros(Esquema):
     tribunais: list[OpcaoFiltro]
     orgaos: list[OpcaoFiltro]
     classes: list[OpcaoFiltro]
+
+
+class CoberturaTribunal(Esquema):
+    """Acórdãos exibíveis de uma fonte e tribunal, e o período (data de referência)."""
+
+    fonte: Fonte
+    fonte_nome: str
+    fonte_url: str
+    tribunal: str
+    acordaos: int
+    desde: date | None
+    ate: date | None
 
 
 class Relator(Esquema):

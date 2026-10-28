@@ -158,12 +158,12 @@ def _imprimir(dados: object) -> None:
     sys.stdout.write(json.dumps(dados, ensure_ascii=False, indent=2, default=str) + "\n")
 
 
-def _coleta() -> fabrica.ColetaDjen:
-    return fabrica.criar_coleta(obter_config(), obter_engine())
+def _coleta(tribunal: str) -> fabrica.ColetaDjen:
+    return fabrica.criar_coleta(obter_config(), obter_engine(), tribunal=tribunal)
 
 
 def _djen(args: argparse.Namespace) -> int:
-    coleta = _coleta()
+    coleta = _coleta(args.tribunal)
     try:
         unidades = coleta.conector.planejar(args.tribunal, args.de, args.ate)
         resumos = coleta.orquestrador.executar(unidades, forcar=args.forcar)
@@ -265,7 +265,7 @@ def _reprocessar(args: argparse.Namespace) -> int:
 
 def _verificar_versoes(args: argparse.Namespace) -> int:
     config = obter_config()
-    coleta = _coleta()
+    coleta = _coleta(args.tribunal)
     try:
         resultados = verificar_versoes(
             obter_engine(),

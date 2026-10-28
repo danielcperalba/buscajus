@@ -52,7 +52,9 @@ def criar_coleta(
         engine,
         conector,
         bruto,
-        processar=ProcessadorTjdft(NormalizadorTjdft(classes), bruto),
+        processar=ProcessadorTjdft(
+            NormalizadorTjdft(classes), bruto, prioridades=config.prioridade_fontes
+        ),
         estatisticas_http=cliente.estatisticas,
         versao_parser=VERSAO_NORMALIZACAO,
     )

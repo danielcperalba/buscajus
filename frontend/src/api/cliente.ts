@@ -2,10 +2,13 @@
 // do Next.js, e o navegador nunca fala direto com a API.
 //
 // A URL vem de API_URL (no compose: http://api:8000), lida em tempo de execução. O IP do
-// usuário segue em X-Forwarded-For, para o limite de taxa da API valer por pessoa, e não
-// para o servidor do Next.js inteiro (a API precisa de api.confiar_x_forwarded_for = true).
+// usuário segue para a API em X-Forwarded-For, para o limite de taxa valer por pessoa: só o
+// último item recebido, o que o proxy reverso (Caddy) acrescentou; os anteriores vêm do
+// cliente e podem ser falsificados. Em produção, só o Caddy é exposto (ARCHITECTURE 12.2).
 import createClient from "openapi-fetch";
 import { headers } from "next/headers";
+
+import { ipAcrescentadoPeloProxy } from "@/lib/ip";
 
 import type { components, paths } from "./esquema";
 
@@ -30,8 +33,7 @@ export type Resposta<T> = { dados: T; falha?: undefined } | { dados?: undefined;
 const URL_PADRAO = "http://127.0.0.1:8000";
 
 async function cliente() {
-  const recebidos = await headers();
-  const encaminhar = recebidos.get("x-forwarded-for") ?? recebidos.get("x-real-ip");
+  const encaminhar = ipAcrescentadoPeloProxy((await headers()).get("x-forwarded-for"));
   return createClient<paths>({
     baseUrl: process.env.API_URL ?? URL_PADRAO,
     headers: encaminhar ? { "x-forwarded-for": encaminhar } : {},
@@ -114,4 +116,11 @@ export async function obterProcesso(numero: string): Promise<Resposta<AcordaosDo
 export async function registrarRemocao(pedido: PedidoRemocao): Promise<Resposta<RemocaoRecebida>> {
   const api = await cliente();
   return chamar(() => api.POST("/api/v1/remocao", { body: pedido }));
+}
+
+export type CoberturaTribunal = Esquemas["CoberturaTribunal"];
+
+export async function obterCobertura(): Promise<Resposta<CoberturaTribunal[]>> {
+  const api = await cliente();
+  return chamar(() => api.GET("/api/v1/cobertura"));
 }

@@ -300,3 +300,70 @@ def test_limites_padrao_na_configuracao() -> None:
 def test_data_referencia_do_tjpr_e_a_disponibilizacao(ids: dict[str, int]) -> None:
     item = ACORDAOS["tjpr_partilha"]
     assert item.data_julgamento is None and item.data_disponibilizacao == date(2026, 10, 14)
+
+
+@pytest.mark.parametrize("proxies", [0, 1])
+def test_ips_falsos_em_sequencia_continuam_no_limite(
+    banco: Engine, ids: dict[str, int], monkeypatch: pytest.MonkeyPatch, proxies: int
+) -> None:
+    """Segurança: variar o X-Forwarded-For a cada requisição não escapa do limite."""
+    monkeypatch.setenv("BUSCAJUS_API__PROXIES_CONFIAVEIS", str(proxies))
+    app = modulo_app.criar_app()
+    app.state.servico = ServicoPostgres(banco)
+    app.state.limitadores["consulta"] = LimitadorJanela(3, 60)
+    # Com um proxy, ele acrescenta o IP real (sempre o mesmo) depois do que o cliente mandou.
+    real = "203.0.113.9"
+    with TestClient(app) as cliente:
+        status = []
+        for i in range(6):
+            falso = f"198.51.100.{i}"
+            cabecalho = f"{falso}, {real}" if proxies else falso
+            resposta = cliente.get("/api/v1/filtros", headers={"x-forwarded-for": cabecalho})
+            status.append(resposta.status_code)
+    assert status == [200, 200, 200, 429, 429, 429]
+    assert app.state.limitadores["consulta"].chaves == 1
+
+
+# --- F6-05: consultas extremas ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "consulta",
+    [
+        "'&|!():*<>\\\"",
+        "herança' OR 1=1 --",
+        "herança & partilha | !testamento",
+        '"frase sem fim',
+        "-",
+        "%_\\",
+        "😀 herança",
+    ],
+)
+def test_caracteres_especiais_nao_quebram_a_busca(
+    cliente: TestClient, ids: dict[str, int], consulta: str
+) -> None:
+    corpo = _busca(cliente, q=consulta)
+    assert {r["id"] for r in corpo["resultados"]} <= {
+        ids[n] for n in ("heranca", "heranca_embargos", "companheira", "tjpr_partilha", "plano")
+    }
+
+
+def test_consulta_muito_longa(cliente: TestClient, ids: dict[str, int]) -> None:
+    longa = ("herança " * 100).strip()  # 799 caracteres: a API corta em 500
+    corpo = _busca(cliente, q=longa)
+    assert len(corpo["consulta"]) == 500
+    assert ids["heranca"] in _ids(corpo)
+    excessiva = cliente.get("/api/v1/busca", params={"q": "x" * 1001})
+    assert excessiva.status_code == 422
+
+
+def test_cobertura_por_fonte_e_tribunal(cliente: TestClient, ids: dict[str, int]) -> None:
+    """F7-04: a cobertura vem do banco (só acórdãos exibíveis)."""
+    cobertura = cliente.get("/api/v1/cobertura").json()
+    assert [(c["tribunal"], c["fonte"], c["acordaos"]) for c in cobertura] == [
+        ("TJDFT", "tjdft", 4),
+        ("TJPR", "djen", 1),
+    ]
+    tjdft = cobertura[0]
+    assert (tjdft["desde"], tjdft["ate"]) == ("2026-09-01", "2026-10-15")
+    assert tjdft["fonte_nome"] == "Jurisprudência do TJDFT"

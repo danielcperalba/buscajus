@@ -4,6 +4,7 @@ import gzip
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import pytest
 import respx
@@ -265,8 +266,10 @@ def test_cli_djen_imprime_so_o_resumo_json(
     _servir(respx_mock, 1)
     original = fabrica.criar_coleta
 
-    def criar(config: Config, engine: Engine) -> fabrica.ColetaDjen:
-        coleta = original(config, engine, anonimizador=criar_anonimizador(DetectorFalso()))
+    def criar(config: Config, engine: Engine, **opcoes: Any) -> fabrica.ColetaDjen:
+        coleta = original(
+            config, engine, anonimizador=criar_anonimizador(DetectorFalso()), **opcoes
+        )
         coleta.conector._hoje = lambda: HOJE
         return coleta
 
@@ -352,3 +355,62 @@ def test_remocao_apaga_o_conteudo_e_reprocessamento_respeita_o_bloqueio(
     )
     assert resumo.contadores.bloqueados == 1
     verificar()
+
+
+def _verificar(coleta: fabrica.ColetaDjen, banco: Engine, config: Config) -> Any:
+    (resultado,) = verificar_versoes(
+        banco,
+        coleta.orquestrador,
+        coleta.cliente,
+        coleta.bruto,
+        url_api=URL_API,
+        regra=fabrica.regra_estado(config),
+        tribunal="TJPR",
+        hoje=HOJE,
+    )
+    return resultado
+
+
+@respx.mock(assert_all_called=False)
+def test_verificacao_sem_metadados_prontos_nao_reprocessa(
+    coleta: fabrica.ColetaDjen, banco: Engine, config: Config, respx_mock: respx.MockRouter
+) -> None:
+    """F6-01: caderno já processado cujo metadado some (404) fica como está."""
+    _servir(respx_mock, 1)
+    _processar_v1(coleta)
+    respx_mock.get(url_metadados(DIA)).respond(404)
+    resultado = _verificar(coleta, banco, config)
+    assert (resultado.versao_atual, resultado.reprocessado, resultado.erro) == (None, False, None)
+
+
+@respx.mock(assert_all_called=False)
+def test_reprocessamento_com_erro_fica_registrado(
+    coleta: fabrica.ColetaDjen, banco: Engine, config: Config, respx_mock: respx.MockRouter
+) -> None:
+    """F6-01: nova versão cujo ZIP não baixa (5xx persistente) vira erro, sem conteúdo."""
+    _servir(respx_mock, 1)
+    _processar_v1(coleta)
+    meta_v2 = ler_json(f"metadados-{dados.DATA}-v2.json")
+    respx_mock.get(url_metadados(DIA)).respond(200, json=meta_v2)
+    respx_mock.get(meta_v2["url"]).respond(503)
+    coleta.cliente._config = coleta.cliente._config.model_copy(update={"max_tentativas": 1})
+    resultado = _verificar(coleta, banco, config)
+    assert resultado.versao_atual == 2 and not resultado.reprocessado
+    assert resultado.erro is not None and "503" in resultado.erro
+    assert _situacoes(banco)[str(dados.AUSENTE_NO_V2)] == "ativo"
+
+
+@respx.mock(assert_all_called=False)
+def test_ausente_em_estado_anomalo_vai_para_quarentena(
+    coleta: fabrica.ColetaDjen, banco: Engine, config: Config, respx_mock: respx.MockRouter
+) -> None:
+    """F6-01: a checagem pontual devolve um status desconhecido → quarentena (falha fechada)."""
+    _servir(respx_mock, 1, 2, 2)
+    anomala = ler_json("comunicacao-900020-cancelada.json")
+    for item in anomala["items"]:
+        item.update(ativo=True, status="X", data_cancelamento=None)
+    respx_mock.get(f"{URL_API}/api/v1/comunicacao").respond(200, json=anomala)
+    _processar_v1(coleta)
+    resultado = _verificar(coleta, banco, config)
+    assert resultado.reprocessado and resultado.anomalias == 1
+    assert _situacoes(banco)[str(dados.AUSENTE_NO_V2)] == "quarentena"

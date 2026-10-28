@@ -1,6 +1,6 @@
 """Etapas depois do bruto: normalização, PII residual e upsert, na transação do lote."""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import Connection
@@ -21,9 +21,12 @@ class ProcessadorAcordaos:
         self,
         normalizar: Callable[[Mapping[str, Any]], AcordaoNormalizado],
         estado: Callable[[Mapping[str, Any]], EstadoFonte],
+        *,
+        prioridades: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         self._normalizar = normalizar
         self._estado = estado
+        self._prioridades = prioridades
 
     def __call__(self, conexao: Connection, lote: LoteBruto, coleta_bruta_id: int) -> Contadores:
         return self.processar_itens(conexao, lote.itens, coleta_bruta_id)
@@ -50,6 +53,7 @@ class ProcessadorAcordaos:
                 cancelado=cancelado,
                 motivos_pii=motivos,
                 anomalia=anomalia,
+                prioridades=self._prioridades,
             )
             if resultado is Resultado.BLOQUEADO:
                 contadores.bloqueados += 1

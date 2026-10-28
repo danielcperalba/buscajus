@@ -11,7 +11,7 @@ histÃ³rico, trechos apagados e arquivos brutos reescritos sem ele. A recoleta nÃ
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import Connection, text
@@ -44,8 +44,14 @@ def remover_por_segredo(conexao: Connection, bruto: ArmazenamentoBruto, uuids: l
 
 
 class ProcessadorTjdft:
-    def __init__(self, normalizar: NormalizadorTjdft, bruto: ArmazenamentoBruto) -> None:
-        self._comum = ProcessadorAcordaos(normalizar, _sempre_ativo)
+    def __init__(
+        self,
+        normalizar: NormalizadorTjdft,
+        bruto: ArmazenamentoBruto,
+        *,
+        prioridades: Mapping[str, Sequence[str]] | None = None,
+    ) -> None:
+        self._comum = ProcessadorAcordaos(normalizar, _sempre_ativo, prioridades=prioridades)
         self._bruto = bruto
 
     def __call__(self, conexao: Connection, lote: LoteBruto, coleta_bruta_id: int) -> Contadores:

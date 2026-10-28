@@ -59,6 +59,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/acordaos/{acordao_id}/situacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Situacao
+         * @description Só a situação, sem o conteúdo: o site a usa para responder 404/410 antes de renderizar.
+         *
+         *     Fora do limite de taxa (é uma consulta por chave primária e não devolve texto), para que
+         *     abrir um acórdão não conte duas vezes.
+         */
+        get: operations["situacao_api_v1_acordaos__acordao_id__situacao_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/processos/{numero}": {
         parameters: {
             query?: never;
@@ -88,6 +111,26 @@ export interface paths {
         };
         /** Filtros */
         get: operations["filtros_api_v1_filtros_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobertura": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cobertura
+         * @description Acórdãos e período cobertos por fonte e tribunal (F7-04; página /sobre).
+         */
+        get: operations["cobertura_api_v1_cobertura_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -156,6 +199,29 @@ export interface components {
             codigo: number | null;
             /** Nome */
             nome: string | null;
+        };
+        /**
+         * CoberturaTribunal
+         * @description Acórdãos exibíveis de uma fonte e tribunal, e o período (data de referência).
+         */
+        CoberturaTribunal: {
+            /**
+             * Fonte
+             * @enum {string}
+             */
+            fonte: "djen" | "tjdft";
+            /** Fonte Nome */
+            fonte_nome: string;
+            /** Fonte Url */
+            fonte_url: string;
+            /** Tribunal */
+            tribunal: string;
+            /** Acordaos */
+            acordaos: number;
+            /** Desde */
+            desde: string | null;
+            /** Ate */
+            ate: string | null;
         };
         /** DetalheAcordao */
         DetalheAcordao: {
@@ -456,6 +522,17 @@ export interface components {
             /** Versao */
             versao: string;
         };
+        /**
+         * SituacaoAcordao
+         * @description Situação exibível de um acórdão, sem o conteúdo (para o site responder 404/410 cedo).
+         */
+        SituacaoAcordao: {
+            /**
+             * Situacao
+             * @enum {string}
+             */
+            situacao: "ativo" | "cancelado" | "removido";
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -605,6 +682,46 @@ export interface operations {
             };
         };
     };
+    situacao_api_v1_acordaos__acordao_id__situacao_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                acordao_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SituacaoAcordao"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     processo_api_v1_processos__numero__get: {
         parameters: {
             query?: never;
@@ -670,6 +787,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Filtros"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    cobertura_api_v1_cobertura_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoberturaTribunal"][];
                 };
             };
             /** @description Too Many Requests */

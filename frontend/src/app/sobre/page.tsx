@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
+
+import { Cobertura } from "@/componentes/Cobertura";
 
 export const metadata: Metadata = {
   title: "Sobre",
@@ -37,14 +40,13 @@ export default function Sobre() {
       </p>
 
       <h2>Cobertura</h2>
-      <ul>
-        <li>TJPR: ementas publicadas no DJEN a partir de 23/07/2025.</li>
-        <li>TJDFT: acórdãos publicados a partir do início da coleta.</li>
-      </ul>
       <p>
-        Acórdãos do TJDFT sob segredo de justiça não entram na base. A cobertura exata por tribunal
-        e período passará a ser mostrada aqui a partir dos dados da própria base.
+        O TJPR publica ementas de acórdãos no DJEN desde 23/07/2025. Acórdãos do TJDFT sob segredo
+        de justiça não entram na base. A tabela abaixo vem da própria base:
       </p>
+      <Suspense fallback={<p>Carregando a cobertura…</p>}>
+        <Cobertura />
+      </Suspense>
 
       <h2>Privacidade e remoção</h2>
       <p>

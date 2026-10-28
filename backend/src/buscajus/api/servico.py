@@ -10,6 +10,7 @@ from typing import Protocol
 from buscajus.api.consulta import ConsultaAnalisada
 from buscajus.api.esquemas import (
     AcordaosDoProcesso,
+    CoberturaTribunal,
     DetalheAcordao,
     Filtros,
     FiltrosBusca,
@@ -18,6 +19,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    SituacaoAcordao,
 )
 
 
@@ -41,9 +43,15 @@ class ServicoBusca(Protocol):
 
     def detalhe(self, acordao_id: int) -> DetalheAcordao | Indisponivel | None: ...
 
+    def situacao(self, acordao_id: int) -> SituacaoAcordao | None:
+        """``None`` para inexistente e para o que não é exibido (quarentena, duplicado)."""
+        ...
+
     def processo(self, digitos: str) -> AcordaosDoProcesso | None: ...
 
     def filtros(self) -> Filtros: ...
+
+    def cobertura(self) -> list[CoberturaTribunal]: ...
 
     def relatores(self, prefixo: str) -> list[Relator]: ...
 

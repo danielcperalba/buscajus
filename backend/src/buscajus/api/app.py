@@ -14,6 +14,7 @@ from buscajus.api.esquemas import (
     LIMITE_RESULTADOS,
     POR_PAGINA,
     AcordaosDoProcesso,
+    CoberturaTribunal,
     DetalheAcordao,
     Erro,
     Filtros,
@@ -23,6 +24,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    SituacaoAcordao,
 )
 from buscajus.api.limite import LimitadorJanela, ip_do_cliente, verificar
 from buscajus.api.mock import ServicoMock
@@ -64,7 +66,7 @@ def _limite(nome: str) -> Callable[[Request], None]:
 
     def verificar_limite(request: Request) -> None:
         config: Config = request.app.state.config
-        ip = ip_do_cliente(request, confiar_x_forwarded_for=config.api.confiar_x_forwarded_for)
+        ip = ip_do_cliente(request, proxies_confiaveis=config.api.proxies_confiaveis)
         verificar(request.app.state.limitadores[nome], ip)
 
     return verificar_limite
@@ -126,6 +128,19 @@ def detalhe(servico: Servico, acordao_id: Annotated[int, Path(ge=1)]) -> Detalhe
     return resultado
 
 
+@rotas.get("/acordaos/{acordao_id}/situacao", responses=_erros(404))
+def situacao(servico: Servico, acordao_id: Annotated[int, Path(ge=1)]) -> SituacaoAcordao:
+    """Só a situação, sem o conteúdo: o site a usa para responder 404/410 antes de renderizar.
+
+    Fora do limite de taxa (é uma consulta por chave primária e não devolve texto), para que
+    abrir um acórdão não conte duas vezes.
+    """
+    resultado = servico.situacao(acordao_id)
+    if resultado is None:
+        raise ErroApi(404, "nao_encontrado", "acórdão não encontrado")
+    return resultado
+
+
 @rotas.get("/processos/{numero}", responses=_erros(404, 422, 429), dependencies=[LimiteConsulta])
 def processo(servico: Servico, numero: Annotated[str, Path(max_length=40)]) -> AcordaosDoProcesso:
     """Acórdãos de um processo, com ou sem máscara (prefixo a partir de NNNNNNN-DD)."""
@@ -141,6 +156,12 @@ def processo(servico: Servico, numero: Annotated[str, Path(max_length=40)]) -> A
 @rotas.get("/filtros", responses=_erros(429), dependencies=[LimiteConsulta])
 def filtros(servico: Servico) -> Filtros:
     return servico.filtros()
+
+
+@rotas.get("/cobertura", responses=_erros(429), dependencies=[LimiteConsulta])
+def cobertura(servico: Servico) -> list[CoberturaTribunal]:
+    """Acórdãos e período cobertos por fonte e tribunal (F7-04; página /sobre)."""
+    return servico.cobertura()
 
 
 @rotas.get("/relatores", responses=_erros(429), dependencies=[LimiteConsulta])
@@ -175,8 +196,12 @@ def criar_app() -> FastAPI:
         ServicoMock() if config.api.mock else ServicoPostgres(obter_engine(), config.busca)
     )
     app.state.limitadores = {
-        "consulta": LimitadorJanela(config.api.consultas_por_minuto, 60),
-        "remocao": LimitadorJanela(config.api.remocoes_por_hora, 3600),
+        "consulta": LimitadorJanela(
+            config.api.consultas_por_minuto, 60, max_chaves=config.api.max_ips_limitador
+        ),
+        "remocao": LimitadorJanela(
+            config.api.remocoes_por_hora, 3600, max_chaves=config.api.max_ips_limitador
+        ),
     }
 
     @app.exception_handler(ErroApi)

@@ -69,8 +69,13 @@ class Agendador:
         agora = self._agora().astimezone(FUSO)
         hoje = agora.date().isoformat()
         config = self._config.agendador
+        ajustes = self._config.djen.ajustes
         tarefas = [
-            (TAREFA_DJEN_DIARIO, config.horario_djen, {"tribunal": tribunal, "data": hoje})
+            (
+                TAREFA_DJEN_DIARIO,
+                (ajustes[tribunal].horario if tribunal in ajustes else None) or config.horario_djen,
+                {"tribunal": tribunal, "data": hoje},
+            )
             for tribunal in self._config.djen.tribunais
         ]
         if self._config.tjdft.ativo:
@@ -147,7 +152,7 @@ def coleta_djen_diaria(config: Config, engine: Engine) -> Executor:
     def executar(payload: Mapping[str, Any]) -> None:
         tribunal = str(payload["tribunal"])
         hoje = datetime.fromisoformat(str(payload["data"])).date()
-        coleta = criar_coleta(config, engine)  # sem NER: falha fechada aqui
+        coleta = criar_coleta(config, engine, tribunal=tribunal)  # sem NER: falha fechada
         try:
             inicio = hoje - timedelta(days=config.agendador.dias_retroativos)
             coleta.orquestrador.executar(coleta.conector.planejar(tribunal, inicio, hoje))

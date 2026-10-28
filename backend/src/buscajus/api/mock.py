@@ -17,6 +17,7 @@ from buscajus.api.esquemas import (
     POR_PAGINA,
     AcordaosDoProcesso,
     Classe,
+    CoberturaTribunal,
     DetalheAcordao,
     Filtros,
     FiltrosBusca,
@@ -27,7 +28,9 @@ from buscajus.api.esquemas import (
     RemocaoRecebida,
     RespostaBusca,
     ResultadoBusca,
+    SituacaoAcordao,
 )
+from buscajus.ingest.fontes import FONTES
 from buscajus.ingest.processo import digito_verificador
 from buscajus.ingest.texto import chave
 
@@ -225,6 +228,14 @@ class ServicoMock:
             return INDISPONIVEIS[acordao_id]
         return next((e.detalhe for e in EXEMPLOS if e.detalhe.id == acordao_id), None)
 
+    def situacao(self, acordao_id: int) -> SituacaoAcordao | None:
+        resultado = self.detalhe(acordao_id)
+        if resultado is None:
+            return None
+        if isinstance(resultado, Indisponivel):
+            return SituacaoAcordao(situacao=resultado.erro)
+        return SituacaoAcordao(situacao="ativo")
+
     def processo(self, digitos: str) -> AcordaosDoProcesso | None:
         exemplos = [e for e in EXEMPLOS if e.digitos.startswith(digitos)]
         if not exemplos:
@@ -246,6 +257,28 @@ class ServicoMock:
                 [(str(d.classe.codigo), d.classe.nome or "") for d in detalhes if d.classe.codigo]
             ),
         )
+
+    def cobertura(self) -> list[CoberturaTribunal]:
+        por_chave: dict[tuple[str, str], list[_Exemplo]] = {}
+        for exemplo in EXEMPLOS:
+            por_chave.setdefault((exemplo.detalhe.fonte, exemplo.detalhe.tribunal), []).append(
+                exemplo
+            )
+        saida = []
+        for (fonte, tribunal), exemplos in sorted(por_chave.items(), key=lambda x: x[0][1]):
+            datas = [e.data_referencia for e in exemplos if e.data_referencia]
+            saida.append(
+                CoberturaTribunal(
+                    fonte=exemplos[0].detalhe.fonte,
+                    fonte_nome=FONTES[fonte].nome,
+                    fonte_url=FONTES[fonte].url,
+                    tribunal=tribunal,
+                    acordaos=len(exemplos),
+                    desde=min(datas, default=None),
+                    ate=max(datas, default=None),
+                )
+            )
+        return saida
 
     def relatores(self, prefixo: str) -> list[Relator]:
         alvo = chave(prefixo)

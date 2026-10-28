@@ -22,7 +22,7 @@ Os trechos vetoriais (``acordao_trecho``, Fase 3) serão apagados aqui sempre qu
 deixar de ser ``ativo`` ou o conteúdo mudar (F3-09).
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from enum import StrEnum
 
@@ -34,8 +34,10 @@ from buscajus.ingest.remocao import apagar_conteudo
 # Situações definidas fora da coleta, que a recoleta não desfaz.
 SITUACOES_PERSISTENTES = ("removido", "duplicado")
 
-# Dedup entre fontes (F2-09): menor número, maior prioridade. A API do tribunal vence o DJEN.
-PRIORIDADE_FONTE = {"tjdft": 0, "djen": 1}
+# Dedup entre fontes (F2-09): ordem padrão, da maior para a menor prioridade. A API do
+# tribunal vence o DJEN. Por tribunal, a ordem vem de ``prioridade_fontes`` (F7-05).
+ORDEM_PADRAO: tuple[str, ...] = ("tjdft", "djen")
+Prioridades = Mapping[str, Sequence[str]]
 MOTIVO_DUPLICADO = "mesmo processo e data em fonte de maior prioridade"
 
 _COLUNAS_CONTEUDO = (
@@ -102,22 +104,31 @@ def situacao_coletada(
     return "ativo", None
 
 
-def _fontes(acordao: AcordaoNormalizado, *, superiores: bool) -> list[str]:
-    propria = PRIORIDADE_FONTE[acordao.fonte]
-    return [
-        fonte
-        for fonte, prioridade in PRIORIDADE_FONTE.items()
-        if (prioridade < propria if superiores else prioridade > propria)
-    ]
+def ordem_das_fontes(tribunal: str, prioridades: Prioridades | None = None) -> tuple[str, ...]:
+    """Fontes do tribunal da maior para a menor prioridade; as não listadas vêm por último."""
+    configurada = tuple((prioridades or {}).get(tribunal.upper(), ()))
+    return configurada + tuple(f for f in ORDEM_PADRAO if f not in configurada)
+
+
+def _fontes(
+    acordao: AcordaoNormalizado, prioridades: Prioridades | None, *, superiores: bool
+) -> list[str]:
+    ordem = ordem_das_fontes(acordao.tribunal, prioridades)
+    if acordao.fonte not in ordem:
+        return []
+    propria = ordem.index(acordao.fonte)
+    return list(ordem[:propria] if superiores else ordem[propria + 1 :])
 
 
 def _data_referencia(acordao: AcordaoNormalizado) -> date | None:
     return acordao.data_julgamento or acordao.data_publicacao or acordao.data_disponibilizacao
 
 
-def duplicata_superior(conexao: Connection, acordao: AcordaoNormalizado) -> int | None:
+def duplicata_superior(
+    conexao: Connection, acordao: AcordaoNormalizado, prioridades: Prioridades | None = None
+) -> int | None:
     """Id do acórdão ativo de fonte com maior prioridade que é o mesmo deste, se houver."""
-    fontes = _fontes(acordao, superiores=True)
+    fontes = _fontes(acordao, prioridades, superiores=True)
     data = _data_referencia(acordao)
     if not fontes or data is None:
         return None
@@ -134,10 +145,13 @@ def duplicata_superior(conexao: Connection, acordao: AcordaoNormalizado) -> int 
 
 
 def marcar_duplicatas_inferiores(
-    conexao: Connection, acordao: AcordaoNormalizado, acordao_id: int
+    conexao: Connection,
+    acordao: AcordaoNormalizado,
+    acordao_id: int,
+    prioridades: Prioridades | None = None,
 ) -> int:
     """Marca como ``duplicado`` os ativos de menor prioridade que são o mesmo acórdão."""
-    fontes = _fontes(acordao, superiores=False)
+    fontes = _fontes(acordao, prioridades, superiores=False)
     data = _data_referencia(acordao)
     if not fontes or data is None:
         return 0
@@ -188,6 +202,7 @@ def upsert(
     cancelado: bool,
     motivos_pii: Sequence[str] = (),
     anomalia: bool = False,
+    prioridades: Prioridades | None = None,
 ) -> Resultado:
     chave = {"fonte": acordao.fonte, "id_fonte": acordao.id_fonte}
     if bloqueado(conexao, acordao):
@@ -205,7 +220,9 @@ def upsert(
         return Resultado.BLOQUEADO
 
     situacao, motivo = situacao_coletada(cancelado, motivos_pii, anomalia=anomalia)
-    duplicata_de = duplicata_superior(conexao, acordao) if situacao == "ativo" else None
+    duplicata_de = (
+        duplicata_superior(conexao, acordao, prioridades) if situacao == "ativo" else None
+    )
     if duplicata_de is not None:
         situacao, motivo = "duplicado", MOTIVO_DUPLICADO
     valores = acordao.colunas() | {
@@ -236,7 +253,7 @@ def upsert(
         ).one_or_none()
         if inserido is not None:
             if situacao == "ativo":
-                marcar_duplicatas_inferiores(conexao, acordao, inserido.id)
+                marcar_duplicatas_inferiores(conexao, acordao, inserido.id, prioridades)
             return Resultado.INSERIDO
         # Outra transação inseriu no meio do caminho: segue como atualização.
         return upsert(
@@ -246,6 +263,7 @@ def upsert(
             cancelado=cancelado,
             motivos_pii=motivos_pii,
             anomalia=anomalia,
+            prioridades=prioridades,
         )
 
     mudou = atual.hash_conteudo != acordao.hash_conteudo
@@ -273,7 +291,7 @@ def upsert(
         valores | {"id": atual.id},
     )
     if situacao == "ativo" and atual.situacao not in SITUACOES_PERSISTENTES:
-        marcar_duplicatas_inferiores(conexao, acordao, atual.id)
+        marcar_duplicatas_inferiores(conexao, acordao, atual.id, prioridades)
     return Resultado.NOVA_VERSAO if mudou else Resultado.ESTADO_ATUALIZADO
 
 
