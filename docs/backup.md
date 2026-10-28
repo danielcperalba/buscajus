@@ -5,12 +5,9 @@
 `ops/backup.sh [diretório]` roda `pg_dump` (formato custom, sem dono) **dentro do contêiner `db`**, com a mesma versão do servidor, e grava `{banco}-{AAAAMMDDThhmmssZ}.dump` mais o `.sha256`. Backups com mais de `BACKUP_RETENCAO_DIAS` (padrão 14) são apagados.
 
 - O backup não inclui a área temporária dos cadernos (tmpfs) nem os arquivos brutos do volume `raw`, que são recriáveis a partir das fontes.
-- Guarde os backups em outro disco ou host (ARCHITECTURE.md, seção 12.2).
-- Agendamento sugerido no cron do servidor:
-
-  ```
-  30 3 * * * cd /srv/buscajus && ops/backup.sh /backups/buscajus >> /var/log/buscajus-backup.log 2>&1
-  ```
+- Guarde os backups em outro disco ou host; a cópia externa está em [implantacao.md](implantacao.md#cópia-fora-do-servidor).
+- **Em produção**, o serviço `backup` do `compose.prod.yaml` (`ops/backup-servico.sh`, F8-04) faz o mesmo dump todo dia às `BACKUP_HORA_UTC`, com retenção `BACKUP_RETENCAO_DIAS`, em `BACKUP_DIR`; não é preciso cron. `ops/backup.sh` fica para backups avulsos (antes de uma atualização, por exemplo).
+- O `.sha256` guarda só o nome do arquivo: confira dentro do diretório (`sha256sum -c arquivo.dump.sha256`).
 
 ## Restauração
 

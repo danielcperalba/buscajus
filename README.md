@@ -17,7 +17,9 @@ Busca gratuita de jurisprudência brasileira por contexto (semântica), a partir
 | `backend/src/buscajus/core/` | Configuração e logging |
 | `frontend/` | Interface web (Next.js) |
 | `compose.yaml` | Ambiente local: Postgres + pgvector, migrações, API, worker e web |
-| `docs/` | Relatórios de carga e de avaliação |
+| `compose.prod.yaml` | Produção: Caddy, redes internas, limites de memória e backup agendado |
+| `ops/` | Backup, restauração e Caddyfile |
+| `docs/` | Implantação, lançamento, backup e relatórios |
 | `data/` | Dados locais (brutos filtrados, modelos); fora do git |
 
 ## Rodar com Docker Compose
@@ -144,6 +146,7 @@ pnpm e2e            # Playwright: sobe a API mock (porta 8100) e o site constru�
 ```
 
 - `CONTATO_EMAIL` (opcional): e-mail do projeto exibido como texto na página de remoção.
+- `API_TIMEOUT_MS` (padrão 8000) e `API_TIMEOUT_SITUACAO_MS` (3000): timeouts das chamadas à API; no detalhe do acórdão, API fora do ar ou lenta vira 503.
 - Sem banco: suba a API em modo mock (`BUSCAJUS_API__MOCK=true`, seção API acima) e rode `pnpm dev`.
 - Os tipos da API vêm de `openapi.json`. Quando o contrato mudar: `uv run buscajus api openapi > ../frontend/openapi.json` em `backend/` e `pnpm api:gerar` aqui; o build falha se os tipos estiverem desatualizados.
 - Dependências novas só entram com 14 dias de publicação (`minimumReleaseAge` em `pnpm-workspace.yaml`).
@@ -151,15 +154,20 @@ pnpm e2e            # Playwright: sobe a API mock (porta 8100) e o site constru�
 ### Backup e restauração
 
 ```bash
-ops/backup.sh /caminho/dos/backups          # pg_dump dentro do contêiner db, com retenção
+ops/backup.sh /caminho/dos/backups          # pg_dump dentro do contêiner db, com retenção (avulso)
 ops/restaurar.sh arquivo.dump [banco]       # restaura num banco separado e mostra contagens
 ```
 
-Procedimento e teste de restauração em [docs/backup.md](docs/backup.md).
+Procedimento e teste de restauração em [docs/backup.md](docs/backup.md). Em produção, o serviço `backup` do `compose.prod.yaml` agenda o backup diário.
 
 ### Produção
 
-Só o proxy reverso (Caddy) fica exposto; `web` e `api` não. Na API, `BUSCAJUS_API__PROXIES_CONFIAVEIS=1` e `BUSCAJUS_AMBIENTE=producao` (que recusa a senha padrão do banco). Detalhes no ARCHITECTURE.md, seção 12.2.
+```bash
+cp .env.prod.example .env      # DOMINIO, EMAIL_ACME, POSTGRES_PASSWORD, BACKUP_*
+docker compose up -d --build   # o .env aponta COMPOSE_FILE=compose.prod.yaml
+```
+
+Só o proxy reverso (Caddy) fica exposto; `web` e `api` não. Na API, `BUSCAJUS_API__PROXIES_CONFIAVEIS=1` e `BUSCAJUS_AMBIENTE=producao` (que recusa a senha padrão do banco), já fixos no compose. Guia em [docs/implantacao.md](docs/implantacao.md), checklist em [docs/lancamento.md](docs/lancamento.md) e decisões no ARCHITECTURE.md, seção 12.2.
 
 ### Pre-commit
 

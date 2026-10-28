@@ -24,6 +24,8 @@
 >
 > **Revisão 12 (27/10/2026)**: correção de segurança do IP do cliente no limite de taxa e requisito de implantação (seções 10.1 e 12.2); 404/410 reais no detalhe do acórdão (seção 11.2); Fase 6 com dados sintéticos e Fase 7 sem fontes novas (ajustes por tribunal, perfis de parser, registro de fontes, prioridade configurável, senha padrão recusada em produção).
 >
+> **Revisão 13 (28/10/2026)**: produção (seção 12.2): compose próprio com o Caddy como único serviço exposto, redes internas, limites de memória, backups agendados; detalhe do acórdão responde 503 com timeout quando a API falha (seção 11.2).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -847,7 +849,7 @@ Item de resultado:
 
 ### 11.2 Implementação (Bloco P)
 
-- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. Como o conteúdo vem em streaming (prerender parcial), o status HTTP sairia sempre 200; por isso um Proxy do Next (`src/proxy.ts`), restrito a `/acordao/:id`, consulta `GET /acordaos/{id}/situacao` antes de renderizar. Inexistente (ou id inválido) → HTML de `/nao-encontrado` com **404**; cancelado ou removido → a página de aviso (com o link oficial, se cancelado) com **410**; ativo, ou API fora do ar → segue normalmente. Navegações internas do roteador (cabeçalho `RSC`) e Server Actions não passam pela conferência.
+- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. Como o conteúdo vem em streaming (prerender parcial), o status HTTP sairia sempre 200; por isso um Proxy do Next (`src/proxy.ts`), restrito a `/acordao/:id`, consulta `GET /acordaos/{id}/situacao` antes de renderizar. Inexistente (ou id inválido) → HTML de `/nao-encontrado` com **404**; cancelado ou removido → a página de aviso (com o link oficial, se cancelado) com **410**; ativo → segue normalmente; API fora do ar, lenta (acima de `API_TIMEOUT_SITUACAO_MS`, 3 s), com erro ou resposta inesperada → HTML de `/indisponivel` com **503**, `Retry-After: 30` e `no-store`, sem nenhum detalhe do erro (se nem a página local responder, texto simples com o mesmo status). As chamadas das páginas à API têm timeout próprio (`API_TIMEOUT_MS`, 8 s), depois do qual a página mostra o estado de erro. Navegações internas do roteador (cabeçalho `RSC`) e Server Actions não passam pela conferência.
 - **Processo** (`/processo/[numero]`): número com ou sem máscara, ou prefixo; cartões do mais recente ao mais antigo.
 - **Remoção** (`/remocao`): server action que chama `POST /api/v1/remocao` no servidor; funciona sem JavaScript. `?referencia=` vem preenchido a partir do detalhe. O e-mail de contato do projeto aparece como texto quando `CONTATO_EMAIL` está configurado no `web`.
 - **Institucionais**: `/sobre` e `/privacidade` são rascunhos pendentes de revisão (F5-10); a cobertura por tribunal e período passa a vir da base no F7-04.
@@ -874,7 +876,12 @@ Configuração por variáveis de ambiente (`.env`, com `.env.example` versionado
 
 ### 12.2 Produção do MVP
 
-Um único servidor próprio ou VPS de baixo custo (ex.: 4 vCPU, 8–16 GB de RAM, SSD), rodando o mesmo Compose com proxy reverso (Caddy, TLS automático). Backups diários do Postgres (`ops/backup.sh`, docs/backup.md) para outro disco ou host. Sem serviços gerenciados pagos.
+Um único servidor próprio ou VPS de baixo custo no Brasil (4 vCPU, 8–16 GB de RAM, SSD de 80 GB), rodando o `compose.prod.yaml` (F8-01), independente do Compose de desenvolvimento. Sem serviços gerenciados pagos. Guia em [docs/implantacao.md](docs/implantacao.md) e checklist em [docs/lancamento.md](docs/lancamento.md).
+
+- **Serviços e redes**: `caddy` é o único com portas (80, 443 TCP/UDP). Redes `borda` (Caddy ↔ `web`) e `interna` (`web`, `api`, `db`, `worker`, `backup`, `migracoes`) são `internal`, sem saída para a internet; só o `worker` está também na rede `saida`, para as fontes. O Caddy não alcança a API nem o banco.
+- **Caddy** (`ops/caddy/Caddyfile`): TLS automático para `DOMINIO`; HSTS, CSP (`'self'` com `'unsafe-inline'` em scripts e estilos, que o Next usa na hidratação; nada de outra origem), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`; log de acesso sem query string, `Referer`, cookies e `Location`, com IP truncado (/24, /48), seguindo a política do F0-12.
+- **Limites de memória**: `db` 2 GB, `api` 2,5 GB, `worker` 3,5 GB (o tmpfs de 1.100 MB conta no limite do contêiner), `web` 512 MB, `backup` e `migracoes` 512 MB, `caddy` 256 MB. Todos com `restart: unless-stopped` e rotação de logs; healthchecks em todos os serviços HTTP, no `db` e no `backup`.
+- **Backups**: serviço `backup` (`ops/backup-servico.sh`) com `pg_dump` diário às `BACKUP_HORA_UTC`, retenção `BACKUP_RETENCAO_DIAS` e healthcheck que acusa backup com mais de 26 horas; cópia para fora do servidor por cron do usuário de operação (rsync ou rclone com cifragem); restauração em docs/backup.md.
 
 **Requisito de implantação (limite de taxa por IP)**:
 
