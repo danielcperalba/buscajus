@@ -6,7 +6,7 @@
 #   ops/backup.sh [diretorio]          (padrão: ./backups)
 #
 # Variáveis: POSTGRES_USER e POSTGRES_DB (padrão: buscajus), BACKUP_RETENCAO_DIAS (padrão: 14).
-# Agendamento diário sugerido (cron do servidor): 30 3 * * * cd /srv/buscajus && ops/backup.sh
+# Em produção, o serviço "backup" do compose.prod.yaml faz o agendamento (ops/backup-servico.sh).
 set -eu
 
 DESTINO="${1:-./backups}"
@@ -22,7 +22,7 @@ trap 'rm -f "$TEMPORARIO"' EXIT
 docker compose exec -T db pg_dump -U "$USUARIO" -d "$BANCO" --format=custom --no-owner \
   > "$TEMPORARIO"
 mv "$TEMPORARIO" "$ARQUIVO"
-sha256sum "$ARQUIVO" > "$ARQUIVO.sha256"
+(cd "$DESTINO" && sha256sum "$(basename "$ARQUIVO")" > "$(basename "$ARQUIVO").sha256")
 
 # Retenção: apaga backups deste banco com mais de RETENCAO dias.
 find "$DESTINO" -name "$BANCO-*.dump*" -type f -mtime +"$RETENCAO" -exec rm -f {} +

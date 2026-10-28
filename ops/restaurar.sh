@@ -18,7 +18,7 @@ if [ "$DESTINO" = "$PRINCIPAL" ]; then
   exit 2
 fi
 if [ -f "$ARQUIVO.sha256" ]; then
-  sha256sum -c "$ARQUIVO.sha256" >/dev/null
+  (cd "$(dirname "$ARQUIVO")" && sha256sum -c "$(basename "$ARQUIVO").sha256" >/dev/null)
 fi
 
 psql() { docker compose exec -T db psql -U "$USUARIO" -v ON_ERROR_STOP=1 "$@"; }
