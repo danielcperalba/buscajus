@@ -31,6 +31,13 @@ export type FalhaApi = {
 export type Resposta<T> = { dados: T; falha?: undefined } | { dados?: undefined; falha: FalhaApi };
 
 const URL_PADRAO = "http://127.0.0.1:8000";
+// Uma API travada não pode prender a página: cada chamada desiste depois deste tempo.
+const TIMEOUT_PADRAO_MS = 8000;
+
+function timeoutMs(): number {
+  const valor = Number(process.env.API_TIMEOUT_MS);
+  return Number.isFinite(valor) && valor > 0 ? valor : TIMEOUT_PADRAO_MS;
+}
 
 async function cliente() {
   const encaminhar = ipAcrescentadoPeloProxy((await headers()).get("x-forwarded-for"));
@@ -38,6 +45,7 @@ async function cliente() {
     baseUrl: process.env.API_URL ?? URL_PADRAO,
     headers: encaminhar ? { "x-forwarded-for": encaminhar } : {},
     cache: "no-store",
+    fetch: (pedido: Request) => fetch(pedido, { signal: AbortSignal.timeout(timeoutMs()) }),
   });
 }
 
