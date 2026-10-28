@@ -187,8 +187,50 @@ def _request(cabecalhos: dict[str, str]) -> Request:
     )
 
 
-def test_ip_do_cliente() -> None:
-    pedido = _request({"x-forwarded-for": "203.0.113.9, 10.0.0.2"})
-    assert ip_do_cliente(pedido, confiar_x_forwarded_for=False) == "10.0.0.1"
-    assert ip_do_cliente(pedido, confiar_x_forwarded_for=True) == "203.0.113.9"
-    assert ip_do_cliente(_request({}), confiar_x_forwarded_for=True) == "10.0.0.1"
+@pytest.mark.parametrize(
+    ("cabecalho", "proxies", "esperado"),
+    [
+        # Sem proxies confiáveis: o cabeçalho é ignorado.
+        ("203.0.113.9", 0, "10.0.0.1"),
+        # Um proxy: o último item (acrescentado por ele); os da esquerda vêm do cliente.
+        ("1.2.3.4, 203.0.113.9", 1, "203.0.113.9"),
+        ("203.0.113.9", 1, "203.0.113.9"),
+        # Dois proxies: o penúltimo.
+        ("1.2.3.4, 203.0.113.9, 10.0.0.7", 2, "203.0.113.9"),
+        (" 2001:db8::1 ", 1, "2001:db8::1"),
+        # Ausente, curto ou malformado: o IP da conexão.
+        (None, 1, "10.0.0.1"),
+        ("203.0.113.9", 2, "10.0.0.1"),
+        ("1.2.3.4, lixo", 1, "10.0.0.1"),
+        ("", 1, "10.0.0.1"),
+        ("1.2.3.4,", 1, "10.0.0.1"),
+    ],
+)
+def test_ip_do_cliente(cabecalho: str | None, proxies: int, esperado: str) -> None:
+    cabecalhos = {} if cabecalho is None else {"x-forwarded-for": cabecalho}
+    assert ip_do_cliente(_request(cabecalhos), proxies_confiaveis=proxies) == esperado
+
+
+def test_cabecalho_falsificado_pelo_cliente_nao_muda_a_chave() -> None:
+    """O cliente controla o começo do X-Forwarded-For; o proxy acrescenta o IP real no fim."""
+    chaves = {
+        ip_do_cliente(
+            _request({"x-forwarded-for": f"198.51.100.{i}, 203.0.113.9"}), proxies_confiaveis=1
+        )
+        for i in range(50)
+    }
+    assert chaves == {"203.0.113.9"}
+
+
+def test_teto_de_chaves_descarta_as_menos_recentes() -> None:
+    limitador = LimitadorJanela(1, 60, max_chaves=3, relogio=lambda: 0.0)
+    for ip in ("a", "b", "c"):
+        assert limitador.registrar(ip) is None
+    assert limitador.registrar("a") is not None  # "a" passa a ser a mais recente
+    assert limitador.registrar("d") is None  # descarta "b", a menos recente
+    assert limitador.chaves == 3
+    assert limitador.registrar("c") is not None  # "c" continua acompanhada
+    assert limitador.registrar("b") is None  # "b" foi descartada: conta de novo
+    for i in range(1000):
+        limitador.registrar(f"falso-{i}")
+    assert limitador.chaves == 3
