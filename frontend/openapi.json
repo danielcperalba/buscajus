@@ -386,16 +386,6 @@
                 }
               }
             }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Erro"
-                }
-              }
-            }
           }
         }
       }
@@ -416,16 +406,6 @@
                   },
                   "type": "array",
                   "title": "Response Cobertura Api V1 Cobertura Get"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Erro"
                 }
               }
             }

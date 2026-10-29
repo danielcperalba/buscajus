@@ -25,4 +25,6 @@ RUN useradd --system --uid 10001 --no-create-home buscajus \
 USER buscajus
 
 EXPOSE 8000
-CMD ["uvicorn", "buscajus.api.app:criar_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# --no-proxy-headers: o IP do cliente vem só de api.limite.ip_do_cliente (proxies_confiaveis),
+# sem o uvicorn reescrever a conexão a partir do X-Forwarded-For (ARCHITECTURE.md, seção 12.2).
+CMD ["uvicorn", "buscajus.api.app:criar_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

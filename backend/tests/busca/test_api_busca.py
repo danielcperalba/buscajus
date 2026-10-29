@@ -281,7 +281,7 @@ def test_limite_de_taxa_por_ip_e_por_tipo(banco: Engine, ids: dict[str, int]) ->
     with TestClient(app) as cliente:
         assert cliente.get("/api/v1/busca", params={"q": "herança"}).status_code == 200
         assert cliente.get(f"/api/v1/acordaos/{ids['heranca']}").status_code == 200
-        bloqueada = cliente.get("/api/v1/filtros")
+        bloqueada = cliente.get(f"/api/v1/processos/{numero(10)[1]}")
         assert bloqueada.status_code == 429
         assert bloqueada.json()["erro"] == "limite_excedido"
         assert int(bloqueada.headers["retry-after"]) >= 1
@@ -289,6 +289,25 @@ def test_limite_de_taxa_por_ip_e_por_tipo(banco: Engine, ids: dict[str, int]) ->
         assert cliente.post("/api/v1/remocao", json=pedido).status_code == 201
         assert cliente.post("/api/v1/remocao", json=pedido).status_code == 429
         assert cliente.get("/api/v1/saude").status_code in (200, 503)  # sem limite
+        # Cacheadas e sem entrada do usuário: fora do limite.
+        assert cliente.get("/api/v1/filtros").status_code == 200
+        assert cliente.get("/api/v1/cobertura").status_code == 200
+        for rota in ("/api/v1/busca?q=herança", "/api/v1/relatores?prefixo=de tal"):
+            assert cliente.get(rota).status_code == 429
+
+
+def test_sessenta_buscas_pela_pagina_passam_e_a_sexagesima_primeira_nao(
+    banco: Engine, ids: dict[str, int]
+) -> None:
+    """Cada página /busca chama /filtros e /busca: só a busca conta no limite padrão (60)."""
+    app = modulo_app.criar_app()
+    app.state.servico = ServicoPostgres(banco, app.state.config.busca)
+    with TestClient(app) as cliente:
+        status = []
+        for i in range(61):
+            assert cliente.get("/api/v1/filtros").status_code == 200
+            status.append(cliente.get("/api/v1/busca", params={"q": f"herança {i}"}).status_code)
+    assert status == [200] * 60 + [429]
 
 
 def test_limites_padrao_na_configuracao() -> None:
@@ -318,7 +337,9 @@ def test_ips_falsos_em_sequencia_continuam_no_limite(
         for i in range(6):
             falso = f"198.51.100.{i}"
             cabecalho = f"{falso}, {real}" if proxies else falso
-            resposta = cliente.get("/api/v1/filtros", headers={"x-forwarded-for": cabecalho})
+            resposta = cliente.get(
+                "/api/v1/busca", params={"q": "herança"}, headers={"x-forwarded-for": cabecalho}
+            )
             status.append(resposta.status_code)
     assert status == [200, 200, 200, 429, 429, 429]
     assert app.state.limitadores["consulta"].chaves == 1
@@ -367,3 +388,13 @@ def test_cobertura_por_fonte_e_tribunal(cliente: TestClient, ids: dict[str, int]
     tjdft = cobertura[0]
     assert (tjdft["desde"], tjdft["ate"]) == ("2026-09-01", "2026-10-15")
     assert tjdft["fonte_nome"] == "Jurisprudência do TJDFT"
+
+
+def test_cobertura_em_cache(banco: Engine, ids: dict[str, int]) -> None:
+    """Fora do limite de taxa, /cobertura não consulta o banco a cada pedido."""
+    servico = ServicoPostgres(banco)
+    antes = servico.cobertura()
+    inserir(banco, acordao("cache-cobertura", "Ementa sintética.", sequencial=99))
+    assert servico.cobertura() == antes
+    servico._config = servico._config.model_copy(update={"cache_filtros_segundos": 0})
+    assert servico.cobertura() != antes

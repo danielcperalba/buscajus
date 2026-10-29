@@ -146,7 +146,7 @@ class ConfigBusca(BaseModel):
     top_ramo: int = Field(default=100, ge=1)
     # Busca por prefixo do número do processo: no máximo este número de acórdãos.
     limite_prefixo: int = Field(default=50, ge=1)
-    # Cache dos valores de /filtros.
+    # Cache de /filtros e /cobertura (as duas ficam fora do limite de taxa).
     cache_filtros_segundos: float = Field(default=300, ge=0)
 
 

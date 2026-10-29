@@ -789,15 +789,6 @@ export interface operations {
                     "application/json": components["schemas"]["Filtros"];
                 };
             };
-            /** @description Too Many Requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Erro"];
-                };
-            };
         };
     };
     cobertura_api_v1_cobertura_get: {
@@ -816,15 +807,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoberturaTribunal"][];
-                };
-            };
-            /** @description Too Many Requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Erro"];
                 };
             };
         };

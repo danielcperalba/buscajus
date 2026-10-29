@@ -153,12 +153,14 @@ def processo(servico: Servico, numero: Annotated[str, Path(max_length=40)]) -> A
     return resultado
 
 
-@rotas.get("/filtros", responses=_erros(429), dependencies=[LimiteConsulta])
+# /filtros e /cobertura ficam fora do limite de taxa: são cacheadas, não recebem entrada do
+# usuário e toda página de busca chama /filtros (contá-las reduzia o limite efetivo à metade).
+@rotas.get("/filtros")
 def filtros(servico: Servico) -> Filtros:
     return servico.filtros()
 
 
-@rotas.get("/cobertura", responses=_erros(429), dependencies=[LimiteConsulta])
+@rotas.get("/cobertura")
 def cobertura(servico: Servico) -> list[CoberturaTribunal]:
     """Acórdãos e período cobertos por fonte e tribunal (F7-04; página /sobre)."""
     return servico.cobertura()

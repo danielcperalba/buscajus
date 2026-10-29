@@ -94,6 +94,7 @@ class ServicoPostgres:
         self._config = config or ConfigBusca()
         self._vetorial = ramo_vetorial or RamoVetorialDesligado()
         self._cache_filtros: tuple[float, Filtros] | None = None
+        self._cache_cobertura: tuple[float, list[CoberturaTribunal]] | None = None
 
     # --- /busca (F4-08) ------------------------------------------------------------
 
@@ -246,7 +247,15 @@ class ServicoPostgres:
         return filtros
 
     def cobertura(self) -> list[CoberturaTribunal]:
-        """Cobertura por fonte e tribunal, só dos acórdãos exibíveis (F7-04)."""
+        """Cobertura por fonte e tribunal, só dos acórdãos exibíveis (F7-04).
+
+        Com o mesmo cache de /filtros: as duas rotas ficam fora do limite de taxa.
+        """
+        agora = time.monotonic()
+        if self._cache_cobertura is not None:
+            momento, guardado = self._cache_cobertura
+            if agora - momento < self._config.cache_filtros_segundos:
+                return guardado
         with self._engine.connect() as conexao:
             linhas = conexao.execute(
                 text("""
@@ -256,7 +265,7 @@ class ServicoPostgres:
                     GROUP BY fonte, tribunal ORDER BY tribunal, fonte
                 """)
             ).all()
-        return [
+        cobertura = [
             CoberturaTribunal(
                 fonte=linha.fonte,
                 fonte_nome=FONTES[linha.fonte].nome,
@@ -268,6 +277,8 @@ class ServicoPostgres:
             )
             for linha in linhas
         ]
+        self._cache_cobertura = (agora, cobertura)
+        return cobertura
 
     def relatores(self, prefixo: str, limite: int = 10) -> list[Relator]:
         alvo = chave(prefixo)
