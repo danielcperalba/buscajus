@@ -28,10 +28,16 @@ As redes `borda` e `interna` são `internal`: nada nelas sai para a internet, e 
 - **No Brasil.** A API do DJEN bloqueia IPs de fora do país; não use proxy nem VPN para contornar. A coleta roda no `worker` deste servidor.
 - **Linux** com Docker Engine 24+ e o plugin Compose v2 (`docker compose`). O tmpfs dos cadernos precisa de Linux (a permissão `0700` não se aplica no Windows).
 - **CPU**: 2 vCPU bastam sem embeddings; 4 vCPU quando o modelo de embeddings entrar (F3-06).
-- **RAM**: mínimo **8 GB**, recomendado **16 GB**.
-  - Pico estimado hoje: Postgres ~1–2 GB (`shared_buffers` de 512 MB + cache), `worker` ~2,5 GB no pior caso (tmpfs com um caderno de até 1,1 GB, mais o modelo de NER e o Python), `api` ~0,3 GB, `web` ~0,2 GB, `caddy` e `backup` ~0,1 GB cada. Somam ~5 GB, mais o sistema e o cache de disco.
-  - Com o modelo de embeddings (e5-base, ~1,5–2 GB na `api` e outro tanto no `worker` durante a geração), a soma passa de 8 GB: use 16 GB.
+- **RAM**: mínimo **16 GB**.
+  - Os limites do `compose.prod.yaml` somam **8,75 GB** (db 2 + api 2,5 + worker 3,5 + web 0,5 + caddy 0,25), mais 0,5 GB do `backup` (que usa pouco), o sistema e o cache de disco do Postgres. O limite do `worker` inclui o tmpfs de 1.100 MB (um caderno de até 1 GB fica em RAM durante a leitura), o modelo de NER e o Python; o da `api` já reserva espaço para o modelo de embeddings (e5-base, ~1,5–2 GB).
+  - Uso típico hoje é menor (sem embeddings, a `api` fica em ~0,3 GB e o `worker` ocioso em ~0,2 GB), mas os limites valem para o pior caso: um caderno grande no tmpfs junto com a geração de embeddings.
   - O maior caderno do TJPR visto no F1-01 tem 163 MB; o tmpfs só ocupa RAM com o ZIP em uso.
+- **Opção de 8 GB** (limites reduzidos, [`compose.prod.8gb.yaml`](../compose.prod.8gb.yaml)): no `.env`, `COMPOSE_FILE=compose.prod.yaml:compose.prod.8gb.yaml`. Os limites passam a somar 6,25 GB (db 1,5 com `shared_buffers` de 256 MB, api 0,75, worker 3, web 0,5, caddy 0,25). O que se perde:
+  - **embeddings na `api`**: a busca fica só no full-text, sem o ramo vetorial (busca semântica), quando ele for ligado (F3-06);
+  - **geração de embeddings no `worker`**: teria de rodar em outra máquina e chegar pelo banco;
+  - **cache do Postgres** menor: buscas mais lentas à medida que a base cresce (medir no F6-08).
+
+  Serve para lançar só com o full-text; para a busca semântica, migre para 16 GB.
 - **Disco**: SSD, **80 GB** recomendados. Estimativa para 90 dias de TJPR + TJDFT (~95 mil ementas do TJPR, a ~1.500 por dia útil, e ~21 mil acórdãos do TJDFT, a ~7 mil a cada 30 dias):
 
   | Item | Estimativa |

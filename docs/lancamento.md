@@ -16,7 +16,7 @@ Marque cada item com a data e quem conferiu. O guia de implantação está em [i
 
 ## Técnico: servidor
 
-- [ ] Servidor no Brasil, Linux, com RAM e disco dos requisitos; acesso SSH só por chave, sem login de root.
+- [ ] Servidor no Brasil, Linux, com 16 GB de RAM (ou 8 GB com `compose.prod.8gb.yaml`, só full-text) e o disco dos requisitos; acesso SSH só por chave, sem login de root.
 - [ ] Firewall: só 22 (ou a porta do SSH), 80/tcp, 443/tcp e 443/udp abertas.
 - [ ] Atualizações automáticas de segurança do sistema ligadas.
 - [ ] DNS A/AAAA do domínio apontando para o servidor.

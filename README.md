@@ -17,7 +17,7 @@ Busca gratuita de jurisprudência brasileira por contexto (semântica), a partir
 | `backend/src/buscajus/core/` | Configuração e logging |
 | `frontend/` | Interface web (Next.js) |
 | `compose.yaml` | Ambiente local: Postgres + pgvector, migrações, API, worker e web |
-| `compose.prod.yaml` | Produção: Caddy, redes internas, limites de memória e backup agendado |
+| `compose.prod.yaml` | Produção: Caddy, redes internas, limites de memória e backup agendado (`compose.prod.8gb.yaml`: limites reduzidos para 8 GB) |
 | `ops/` | Backup, restauração e Caddyfile |
 | `docs/` | Implantação, lançamento, backup e relatórios |
 | `data/` | Dados locais (brutos filtrados, modelos); fora do git |
@@ -113,7 +113,7 @@ uv run buscajus remocao limpar-contatos
 ```
 
 - A busca usa o full-text do Postgres; o ramo vetorial entra depois que o modelo de embeddings for fixado (F3-06).
-- Limite por IP: 60 consultas por minuto e 5 pedidos de remoção por hora (`BUSCAJUS_API__*`).
+- Limite por IP: 60 consultas por minuto (busca, detalhe, processo e relatores; `/filtros` e `/cobertura` ficam fora, com cache) e 5 pedidos de remoção por hora (`BUSCAJUS_API__*`).
 
 ### Avaliação da busca (Fase 3)
 
