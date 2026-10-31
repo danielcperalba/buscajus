@@ -1,0 +1,19 @@
+{
+  "hits": {
+    "value": 0
+  },
+  "agregacoes": {
+    "base": [],
+    "classe": [],
+    "orgaoJulgador": [],
+    "relator": [],
+    "relatorDesignado": [],
+    "revisor": [],
+    "segredoJustica": []
+  },
+  "paginacao": {
+    "pagina": 0,
+    "tamanho": 40
+  },
+  "registros": []
+}

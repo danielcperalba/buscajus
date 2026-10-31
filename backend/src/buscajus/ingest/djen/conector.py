@@ -114,7 +114,7 @@ class ConectorDjen:
                         extra={"unidade": unidade.descricao, "tentativa": tentativa},
                     )
                     continue
-                itens, contadores = self._ler(arquivo, meta)
+                itens, contadores = self._ler(arquivo, meta, tribunal)
             finally:
                 arquivo.unlink(missing_ok=True)
             yield LoteBruto(
@@ -148,13 +148,14 @@ class ConectorDjen:
         return meta
 
     def _ler(
-        self, arquivo: Path, meta: caderno.MetadadosDjen
+        self, arquivo: Path, meta: caderno.MetadadosDjen, tribunal: str
     ) -> tuple[list[dict[str, object]], Contadores]:
+        tipos = self._config.tipos_aceitos(tribunal)
         contadores = Contadores()
         itens: list[dict[str, object]] = []
         for comunicacao in caderno.ler_comunicacoes(arquivo):
             contadores.recebidos += 1
-            if not tipo_aceito(comunicacao, self._config.tipos_documento_aceitos):
+            if not tipo_aceito(comunicacao, tipos):
                 # Descartada em memória: nada é gravado nem logado.
                 contadores.descartados += 1
                 continue

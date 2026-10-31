@@ -1,12 +1,33 @@
+/* Tokens: contraste AA (4,5:1 ou mais) para texto em fundo claro e escuro. */
 :root {
   --fundo: #ffffff;
-  --texto: #171717;
+  --superficie: #f5f6f8;
+  --texto: #1a1a1a;
+  --texto-suave: #4a4f57;
+  --borda: #c9ced6;
+  --destaque: #0b5cad;
+  --destaque-texto: #ffffff;
+  --marca-fundo: #ffe58a;
+  --marca-texto: #1a1a1a;
+  --erro: #a3161b;
+  --foco: #b45309;
+  --raio: 6px;
+  --largura: 60rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fundo: #0a0a0a;
-    --texto: #ededed;
+    --fundo: #121417;
+    --superficie: #1c2025;
+    --texto: #ececec;
+    --texto-suave: #b6bcc5;
+    --borda: #3a414b;
+    --destaque: #7cb7f5;
+    --destaque-texto: #0b1220;
+    --marca-fundo: #6b5400;
+    --marca-texto: #fff8dc;
+    --erro: #ff8a8a;
+    --foco: #fbbf24;
   }
 }
 
@@ -24,10 +45,397 @@ body {
     "Segoe UI",
     Roboto,
     sans-serif;
+  line-height: 1.5;
 }
 
-.inicio {
-  max-width: 40rem;
+a {
+  color: var(--destaque);
+}
+
+:focus-visible {
+  outline: 3px solid var(--foco);
+  outline-offset: 2px;
+}
+
+mark {
+  background: var(--marca-fundo);
+  color: var(--marca-texto);
+  padding: 0 0.1em;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--destaque);
+  border-radius: var(--raio);
+  padding: 0.5rem 1rem;
+  background: var(--destaque);
+  color: var(--destaque-texto);
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.visualmente-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pular-para-conteudo {
+  position: absolute;
+  left: -100vw;
+}
+
+.pular-para-conteudo:focus {
+  left: 1rem;
+  top: 1rem;
+  background: var(--fundo);
+  padding: 0.5rem 1rem;
+  z-index: 10;
+}
+
+.largura {
+  max-width: var(--largura);
   margin: 0 auto;
-  padding: 4rem 1rem;
+  padding: 0 1rem;
+}
+
+/* Cabeçalho e rodapé */
+.cabecalho,
+.rodape {
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+}
+
+.rodape {
+  border-top: 1px solid var(--borda);
+  border-bottom: none;
+  margin-top: 3rem;
+  padding: 1.5rem 0;
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
+.cabecalho .largura,
+.rodape nav ul,
+.cabecalho nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cabecalho .largura {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rodape nav ul {
+  justify-content: flex-start;
+}
+
+.marca {
+  font-weight: 700;
+  font-size: 1.25rem;
+  text-decoration: none;
+  color: var(--texto);
+}
+
+.conteudo {
+  padding-top: 2rem;
+}
+
+/* Início */
+.inicio h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  margin-bottom: 0.5rem;
+}
+
+.subtitulo {
+  color: var(--texto-suave);
+  max-width: 40rem;
+}
+
+.exemplos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+.exemplos a {
+  display: inline-block;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  text-decoration: none;
+}
+
+/* Formulário de busca e filtros */
+.form-busca {
+  margin: 1.5rem 0;
+}
+
+.campo-busca label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.campo-busca-linha {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-busca-destaque input[type="search"] {
+  font-size: 1.15rem;
+  padding: 0.75rem;
+}
+
+.filtros {
+  margin-top: 1rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0.5rem 1rem;
+}
+
+.filtros summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.filtros-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.campo label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.filtros-acoes {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+/* Resultados */
+.lista-resultados {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cartao {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  background: var(--fundo);
+}
+
+.cartao-numero {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cartao-metadados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.cartao-metadados dt {
+  color: var(--texto-suave);
+  display: inline;
+}
+
+.cartao-metadados dt::after {
+  content: ": ";
+}
+
+.cartao-metadados dd {
+  display: inline;
+  margin: 0;
+}
+
+.cartao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+}
+
+.link-secundario {
+  color: var(--texto-suave);
+}
+
+.citacao-texto {
+  display: block;
+  margin-top: 0.5rem;
+  user-select: all;
+}
+
+.aviso,
+.aviso-limite,
+.resumo {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.cartao-esqueleto {
+  height: 9rem;
+  background: var(--superficie);
+}
+
+.estado {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.25rem;
+}
+
+.estado-erro h1,
+.estado-erro h2 {
+  color: var(--erro);
+}
+
+.paginacao ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.paginacao a,
+.paginacao span {
+  display: inline-block;
+  min-width: 2.5rem;
+  text-align: center;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.paginacao [aria-current="page"] {
+  background: var(--destaque);
+  color: var(--destaque-texto);
+  border-color: var(--destaque);
+}
+
+.paginacao [aria-disabled="true"] {
+  color: var(--texto-suave);
+}
+
+@media (max-width: 40rem) {
+  .campo-busca-linha {
+    flex-direction: column;
+  }
+}
+
+/* Detalhe, páginas de texto e formulário de remoção (bloco P) */
+.pagina-texto,
+.detalhe {
+  max-width: 46rem;
+}
+
+.detalhe-rotulo {
+  color: var(--texto-suave);
+  margin-bottom: 0;
+}
+
+.detalhe h1 {
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.25rem;
+}
+
+.texto-integral {
+  white-space: pre-line;
+}
+
+.citacao {
+  background: var(--superficie);
+  border-left: 4px solid var(--destaque);
+  padding: 0.75rem 1rem;
+}
+
+.links-oficiais {
+  padding-left: 1.25rem;
+}
+
+.solicitar-remocao {
+  margin-top: 2rem;
+  color: var(--texto-suave);
+}
+
+.form-remocao {
+  display: grid;
+  gap: 1rem;
+  max-width: 36rem;
+}
+
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.ajuda {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.erro-campo {
+  color: var(--erro);
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+}
+
+[aria-invalid="true"] {
+  border-color: var(--erro);
+}
+
+.cobertura {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.cobertura th,
+.cobertura td {
+  border-bottom: 1px solid var(--borda);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
 }

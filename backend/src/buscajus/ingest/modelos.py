@@ -6,13 +6,20 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any
 
+from buscajus.core.erros import ErroSeguro
 from buscajus.ingest.conector import Fonte
+
+
+class ItemInvalido(ErroSeguro):
+    """Item do bruto sem os campos mínimos; contado como falha de parser."""
+
 
 # Campos exibidos que entram no hash de conteúdo (mudança neles gera nova versão).
 CAMPOS_CONTEUDO = (
     "ementa",
     "decisao",
     "relator",
+    "relator_designado",
     "orgao_julgador",
     "classe_nome",
     "classe_codigo_cnj",
@@ -20,6 +27,7 @@ CAMPOS_CONTEUDO = (
     "data_julgamento",
     "data_publicacao",
     "data_disponibilizacao",
+    "local_publicacao",
     "link_oficial",
     "link_tribunal",
     "numero_processo",
@@ -48,11 +56,17 @@ class AcordaoNormalizado:
     classe_citacao: str | None = None
     relator: str | None = None
     relator_chave: str | None = None
+    # TJDFT: relator para o acórdão (nomeRelatorDesignado), quando o relator original foi
+    # vencido; a citação usa "Rel. p/ acórdão" com ele. O relator original fica em relator.
+    relator_designado: str | None = None
+    relator_designado_chave: str | None = None
     turma_recursal: bool | None = None
     possui_inteiro_teor: bool | None = None
     data_julgamento: date | None = None
     data_publicacao: date | None = None
     data_disponibilizacao: date | None = None
+    # TJDFT: veículo da publicação (localDePublicacao: "DJE" ou "PJe"), usado na citação.
+    local_publicacao: str | None = None
     decisao: str | None = None
     link_tribunal: str | None = None
     anonimizacao_versao: str | None = None

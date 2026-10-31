@@ -1,0 +1,203 @@
+# Produção (F8-01). Arquivo independente do compose.yaml de desenvolvimento:
+#
+#   cp .env.prod.example .env      # ajuste DOMINIO, EMAIL_ACME e POSTGRES_PASSWORD
+#   docker compose up -d --build   # .env define COMPOSE_FILE=compose.prod.yaml
+#
+# Só o Caddy publica portas (80/443). web, api e db ficam em redes internas, sem portas no
+# host: é o requisito do limite de taxa por IP (ARCHITECTURE.md, seção 12.2). Passo a passo
+# em docs/implantacao.md.
+name: buscajus
+
+x-reinicio: &reinicio
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-backend: &backend
+  <<: *reinicio
+  build: ./backend
+  image: buscajus-backend:${VERSAO:-local}
+  env_file:
+    - path: .env
+      required: true
+  environment: &backend-env
+    BUSCAJUS_AMBIENTE: producao
+    BUSCAJUS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buscajus}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:-buscajus}
+    BUSCAJUS_DIRETORIO_RAW: /dados/raw
+    BUSCAJUS_DIRETORIO_MODELOS: /dados/modelos
+    BUSCAJUS_DIRETORIO_TMP_CADERNOS: /tmp-cadernos
+  networks: [interna]
+
+services:
+  caddy:
+    <<: *reinicio
+    image: caddy:2.9.1-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
+      EMAIL_ACME: ${EMAIL_ACME:?defina EMAIL_ACME no .env}
+    volumes:
+      - ./ops/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [publica, borda]
+    mem_limit: 256m
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      # Porta só interna (não publicada), definida no Caddyfile.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8081/saude"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    <<: *reinicio
+    build: ./frontend
+    image: buscajus-web:${VERSAO:-local}
+    environment:
+      API_URL: http://api:8000
+      CONTATO_EMAIL: ${CONTATO_EMAIL:-}
+      # Timeouts das chamadas à API (ms): páginas e conferência do detalhe (src/proxy.ts).
+      API_TIMEOUT_MS: ${API_TIMEOUT_MS:-8000}
+      API_TIMEOUT_SITUACAO_MS: ${API_TIMEOUT_SITUACAO_MS:-3000}
+    networks: [borda, interna]
+    mem_limit: 512m
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/sobre"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  api:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      # Atrás do Caddy: vale o último item do X-Forwarded-For (ARCHITECTURE.md, seção 12.2).
+      BUSCAJUS_API__PROXIES_CONFIAVEIS: "1"
+      BUSCAJUS_API__MOCK: "false"
+    volumes:
+      - modelos:/dados/modelos:ro
+    # Sem embeddings (F3-06), a API usa ~300 MB; com o e5-base, ~1,5–2 GB.
+    mem_limit: 2560m
+    depends_on:
+      migracoes:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/saude', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  worker:
+    <<: *backend
+    command: ["buscajus-worker"]
+    volumes:
+      - raw:/dados/raw
+      - modelos:/dados/modelos
+    tmpfs:
+      - /tmp-cadernos:size=1100m,mode=0700,uid=10001
+    # O tmpfs conta no limite de memória do contêiner: 1,1 GB do caderno no pior caso, mais o
+    # modelo de NER e o processo Python.
+    mem_limit: 3584m
+    # Precisa de saída para a internet (DJEN, TJDFT); a rede interna não tem.
+    networks: [interna, saida]
+    depends_on:
+      migracoes:
+        condition: service_completed_successfully
+
+  migracoes:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    mem_limit: 512m
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    <<: *reinicio
+    image: pgvector/pgvector:0.8.0-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buscajus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-buscajus}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - maintenance_work_mem=256MB
+    shm_size: 256m
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [interna]
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Backup diário do Postgres às BACKUP_HORA_UTC, com retenção (F8-04; docs/backup.md).
+  backup:
+    <<: *reinicio
+    image: pgvector/pgvector:0.8.0-pg16
+    entrypoint: ["/bin/sh", "/ops/backup-servico.sh"]
+    init: true
+    # Dono dos arquivos em BACKUP_DIR: o usuário de operação, que faz a cópia externa.
+    user: "${BACKUP_UID:?defina BACKUP_UID no .env}:${BACKUP_GID:?defina BACKUP_GID no .env}"
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-buscajus}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      PGDATABASE: ${POSTGRES_DB:-buscajus}
+      BACKUP_HORA_UTC: ${BACKUP_HORA_UTC:-06:30}
+      BACKUP_RETENCAO_DIAS: ${BACKUP_RETENCAO_DIAS:-14}
+    volumes:
+      - ./ops:/ops:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    networks: [interna]
+    mem_limit: 512m
+    depends_on:
+      migracoes:
+        condition: service_completed_successfully
+    healthcheck:
+      # Não saudável se o último backup bem-sucedido tiver mais de 26 horas.
+      test: ["CMD-SHELL", "test -n \"$$(find /backups/.ultimo-backup -mmin -1560 2>/dev/null)\""]
+      interval: 1h
+      timeout: 10s
+      start_period: 10m
+
+networks:
+  # Só o Caddy: portas publicadas e saída para a emissão do certificado (ACME).
+  publica:
+  # Caddy ↔ web, sem saída para a internet.
+  borda:
+    internal: true
+  # web, api, db, worker, backup e migrações, sem saída para a internet.
+  interna:
+    internal: true
+  # Saída do worker para as fontes.
+  saida:
+
+volumes:
+  pgdata:
+  raw:
+  modelos:
+  caddy_data:
+  caddy_config:

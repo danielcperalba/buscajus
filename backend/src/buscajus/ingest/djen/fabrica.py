@@ -42,15 +42,23 @@ def processador(config: Config) -> ProcessadorAcordaos:
     return ProcessadorAcordaos(
         normalizar,
         regra_estado(config).classificar,
+        prioridades=config.prioridade_fontes,
     )
 
 
 def criar_coleta(
-    config: Config, engine: Engine, *, anonimizador: Anonimizador | None = None
+    config: Config,
+    engine: Engine,
+    *,
+    anonimizador: Anonimizador | None = None,
+    tribunal: str | None = None,
 ) -> ColetaDjen:
-    """``anonimizador`` só é passado nos testes; em produção vem da configuração."""
+    """``anonimizador`` só é passado nos testes; em produção vem da configuração.
+
+    Com ``tribunal``, a taxa de requisições é a do ajuste do tribunal, se houver (F7-01).
+    """
     anonimizar = anonimizador or criar_anonimizador(carregar_detector(config.anonimizacao))
-    cliente = ClienteHttp(config.http, config.djen.requisicoes_por_segundo)
+    cliente = ClienteHttp(config.http, config.djen.taxa(tribunal))
     conector = ConectorDjen(config.djen, cliente, anonimizar, config.diretorio_tmp_cadernos)
     bruto = ArmazenamentoBruto(config.diretorio_raw)
     proc = processador(config)

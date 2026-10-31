@@ -1,0 +1,128 @@
+{
+  "hits": {
+    "value": 45
+  },
+  "agregacoes": {
+    "base": [
+      {
+        "nome": "acordaos",
+        "total": 45,
+        "filhos": [
+          {
+            "nome": "acordaos",
+            "total": 39
+          },
+          {
+            "nome": "acordaos-tr",
+            "total": 6
+          }
+        ]
+      }
+    ],
+    "classe": [
+      {
+        "nome": "Apelação Cível",
+        "total": 13
+      },
+      {
+        "nome": "Agravo de Instrumento",
+        "total": 7
+      },
+      {
+        "nome": "Recurso Inominado Cível",
+        "total": 6
+      },
+      {
+        "nome": "Apelação Criminal",
+        "total": 6
+      },
+      {
+        "nome": "Embargos de Declaração Cível",
+        "total": 6
+      },
+      {
+        "nome": "Agravo Interno Cível",
+        "total": 6
+      },
+      {
+        "nome": "Habeas Corpus Criminal",
+        "total": 1
+      }
+    ],
+    "orgaoJulgador": [
+      {
+        "nome": "6ª Turma Cível",
+        "total": 13
+      },
+      {
+        "nome": "3ª Turma Cível",
+        "total": 12
+      },
+      {
+        "nome": "1ª Turma Cível",
+        "total": 7
+      },
+      {
+        "nome": "2ª Turma Criminal",
+        "total": 6
+      },
+      {
+        "nome": "SEGUNDA TURMA RECURSAL",
+        "total": 5
+      },
+      {
+        "nome": "PRIMEIRA TURMA RECURSAL",
+        "total": 1
+      },
+      {
+        "nome": "1ª Câmara Criminal",
+        "total": 1
+      }
+    ],
+    "relator": [
+      {
+        "nome": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+        "total": 19
+      },
+      {
+        "nome": "DEOCLECIANA MORGADÃO TRAVESSEIRO",
+        "total": 13
+      },
+      {
+        "nome": "HERMENEGILDO SOUTELO VILARONGO",
+        "total": 7
+      },
+      {
+        "nome": "OTACÍLIO VENTANILHA BRUSQUETO",
+        "total": 6
+      }
+    ],
+    "relatorDesignado": [
+      {
+        "nome": "LEOPOLDINA ARRUDÃO CAMBRAIETA",
+        "total": 2
+      }
+    ],
+    "revisor": [
+      {
+        "nome": "SEBASTIÃO REBOLEDO ALMENARIM",
+        "total": 1
+      }
+    ],
+    "segredoJustica": [
+      {
+        "nome": 0,
+        "total": 44
+      },
+      {
+        "nome": 1,
+        "total": 1
+      }
+    ]
+  },
+  "paginacao": {
+    "pagina": 2,
+    "tamanho": 40
+  },
+  "registros": []
+}

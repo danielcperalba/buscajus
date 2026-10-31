@@ -1,0 +1,55 @@
+# Proxy reverso de produção (F8-02). Único serviço exposto; repassa tudo ao Next.js (web).
+# DOMINIO e EMAIL_ACME vêm do .env (compose.prod.yaml). TLS automático (Let's Encrypt).
+{
+	admin off
+	email {$EMAIL_ACME}
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# O Next.js usa scripts e estilos inline na hidratação: 'unsafe-inline' é necessário
+		# sem nonce. Nada vem de outra origem (sem CDN, fontes externas ou rastreadores).
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+		-X-Powered-By
+	}
+
+	reverse_proxy web:3000 {
+		# IP real do cliente: substitui qualquer X-Forwarded-For recebido pelo IP da conexão.
+		# Sem trusted_proxies (ARCHITECTURE.md, seção 12.2).
+		header_up X-Forwarded-For {remote_host}
+		header_down -X-Powered-By
+	}
+
+	# Log de acesso sem a busca do usuário (F0-12): sem query string, Referer (que traz a URL
+	# da busca), cookies e Location; IP truncado (/24 e /48).
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" ""
+				request>headers>Referer delete
+				request>headers>Cookie delete
+				request>headers>X-Forwarded-For delete
+				request>remote_ip ip_mask 24 48
+				request>client_ip ip_mask 24 48
+				resp_headers>Location delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}
+
+# Healthcheck do contêiner (porta não publicada no host).
+http://:8081 {
+	respond /saude 200
+}

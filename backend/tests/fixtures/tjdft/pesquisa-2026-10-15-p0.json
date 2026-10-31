@@ -1,0 +1,151 @@
+{
+  "hits": {
+    "value": 3
+  },
+  "agregacoes": {
+    "base": [
+      {
+        "nome": "acordaos",
+        "total": 3,
+        "filhos": [
+          {
+            "nome": "acordaos",
+            "total": 1
+          },
+          {
+            "nome": "acordaos-tr",
+            "total": 2
+          }
+        ]
+      }
+    ],
+    "classe": [
+      {
+        "nome": "Recurso Inominado Cível",
+        "total": 2
+      },
+      {
+        "nome": "Apelação Cível",
+        "total": 1
+      }
+    ],
+    "orgaoJulgador": [
+      {
+        "nome": "SEGUNDA TURMA RECURSAL",
+        "total": 2
+      },
+      {
+        "nome": "1ª Turma Cível",
+        "total": 1
+      }
+    ],
+    "relator": [
+      {
+        "nome": "OTACÍLIO VENTANILHA BRUSQUETO",
+        "total": 2
+      },
+      {
+        "nome": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+        "total": 1
+      }
+    ],
+    "relatorDesignado": [],
+    "revisor": [],
+    "segredoJustica": [
+      {
+        "nome": 0,
+        "total": 3
+      }
+    ]
+  },
+  "paginacao": {
+    "pagina": 0,
+    "tamanho": 40
+  },
+  "registros": [
+    {
+      "sequencial": 7046,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000046",
+      "identificador": "9900046",
+      "dataJulgamento": "2026-10-09T03:00:00.000Z",
+      "dataPublicacao": "2026-10-15T01:10:00.000Z",
+      "decisao": "CONHECIDO. DESPROVIDO. UNÂNIME.",
+      "ementa": "PENAL. APELAÇÃO CRIMINAL. FURTO QUALIFICADO. DOSIMETRIA. PENA-BASE. 1. A valoração negativa de circunstância judicial exige fundamentação concreta. 2. Valor discutido de R$ 46.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000046-28.2099.8.07.9999",
+      "nomeRelator": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "1ª Turma Cível",
+      "versao": "01",
+      "codigoClasseCnj": 198,
+      "codigoSistjOrgaoJulgador": 101,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7047,
+      "base": "acordaos",
+      "subbase": "acordaos-tr",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000047",
+      "identificador": "9900047",
+      "dataJulgamento": "2026-10-03T03:00:00.000Z",
+      "dataPublicacao": "2026-10-15T03:00:00.000Z",
+      "decisao": "CONHECIDO. PARCIALMENTE PROVIDO. UNÂNIME.",
+      "ementa": "JUIZADO ESPECIAL CÍVEL. RECURSO INOMINADO. TELEFONIA. COBRANÇA INDEVIDA. 1. A cobrança por serviço não contratado gera o dever de restituir os valores pagos. 2. Valor discutido de R$ 47.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "DJE",
+      "processo": "0000047-13.2099.8.07.9999",
+      "nomeRelator": "OTACÍLIO VENTANILHA BRUSQUETO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": true,
+      "descricaoOrgaoJulgador": "SEGUNDA TURMA RECURSAL",
+      "versao": "01",
+      "codigoClasseCnj": 460,
+      "codigoSistjOrgaoJulgador": 402,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    },
+    {
+      "sequencial": 7048,
+      "base": "acordaos",
+      "subbase": "acordaos-tr",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000048",
+      "identificador": "9900048",
+      "dataJulgamento": "2026-10-13T03:00:00.000Z",
+      "dataPublicacao": "2026-10-15T18:20:00.000Z",
+      "decisao": "RECURSO CONHECIDO E NÃO PROVIDO. UNÂNIME.",
+      "ementa": "JUIZADO ESPECIAL CÍVEL. DIREITO DO CONSUMIDOR. TRANSPORTE AÉREO. ATRASO DE VOO. ASSISTÊNCIA MATERIAL NÃO PRESTADA. DANO MORAL. QUANTUM ADEQUADO. RECURSO CONHECIDO E NÃO PROVIDO. 1. A companhia aérea responde objetivamente pelo cancelamento de voo sem a assistência material prevista na Resolução 400/2016 da ANAC. 2. O valor fixado na origem atende à razoabilidade e à proporcionalidade. 3. Sentença mantida por seus próprios fundamentos (Lei 9.099/1995, art. 46). Condenado o recorrente vencido ao pagamento das custas e dos honorários advocatícios, fixados em 10% do valor da condenação.",
+      "localDePublicacao": "PJe",
+      "processo": "0000048-95.2099.8.07.9999",
+      "nomeRelator": "OTACÍLIO VENTANILHA BRUSQUETO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": true,
+      "descricaoOrgaoJulgador": "SEGUNDA TURMA RECURSAL",
+      "versao": "01",
+      "codigoClasseCnj": 460,
+      "codigoSistjOrgaoJulgador": 402,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    }
+  ]
+}

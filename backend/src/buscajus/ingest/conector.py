@@ -52,6 +52,8 @@ class Contadores:
     recebidos: int = 0
     aceitos: int = 0
     descartados: int = 0
+    # Dos descartados, os que vieram sob segredo de justiça (TJDFT). Só a contagem é gravada.
+    segredo: int = 0
     # Ids das comunicações recusadas pela falha segura da anonimização (nunca o conteúdo).
     rejeitados_anonimizacao: list[str] = field(default_factory=list)
     falhas_parser: int = 0
@@ -60,17 +62,22 @@ class Contadores:
     bloqueados: int = 0
     # Estado da fonte não reconhecido (ex.: status desconhecido): vai para a quarentena.
     anomalias: int = 0
+    # Ids (da fonte) dos itens recusados por bloqueio, só em memória: o arquivo bruto do lote
+    # é reescrito sem eles (F2-13). Só a contagem (bloqueados) é gravada.
+    ids_bloqueados: list[str] = field(default_factory=list)
 
     def somar(self, outro: "Contadores") -> None:
         self.recebidos += outro.recebidos
         self.aceitos += outro.aceitos
         self.descartados += outro.descartados
+        self.segredo += outro.segredo
         self.rejeitados_anonimizacao.extend(outro.rejeitados_anonimizacao)
         self.falhas_parser += outro.falhas_parser
         self.quarentena += outro.quarentena
         self.cancelados += outro.cancelados
         self.bloqueados += outro.bloqueados
         self.anomalias += outro.anomalias
+        self.ids_bloqueados.extend(outro.ids_bloqueados)
 
 
 @dataclass(frozen=True)
@@ -90,6 +97,10 @@ class LoteBruto:
     pagina: int | None = None
     total_fonte: int | None = None
     caderno: MetadadosCaderno | None = None
+    # TJDFT: uuids dos registros descartados por segredo de justiça, só em memória, para
+    # retirar da busca os que já estavam indexados (segredo superveniente, F2-07). Nunca são
+    # gravados no bruto nem na unidade de coleta.
+    ids_segredo: list[str] = field(default_factory=list)
 
 
 class UnidadeSemDados(Exception):

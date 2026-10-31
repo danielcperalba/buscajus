@@ -1,0 +1,25 @@
+# Limites reduzidos para servidor de 8 GB (opção do docs/implantacao.md). Uso, no .env:
+#
+#   COMPOSE_FILE=compose.prod.yaml:compose.prod.8gb.yaml
+#
+# Somam 6,25 GB (db 1,5 + api 0,75 + worker 3 + web 0,5 + caddy 0,25; backup e migrações
+# usam pouco). Perde-se: embeddings na api (busca só full-text, sem o ramo vetorial) e no
+# worker (geração de embeddings), e cache menor do Postgres (buscas mais lentas com a base
+# crescendo). O worker mantém espaço para o tmpfs de 1.100 MB e o modelo de NER.
+services:
+  db:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - maintenance_work_mem=128MB
+    mem_limit: 1536m
+
+  api:
+    mem_limit: 768m
+
+  worker:
+    mem_limit: 3g

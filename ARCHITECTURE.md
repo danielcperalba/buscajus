@@ -12,6 +12,22 @@
 >
 > **Revisão 6 (24/10/2026)**: F1-01 executado no Brasil (3 cadernos TJPR, 347.005 comunicações, 5.482 ementas). Campos ausentes nos cadernos recentes (`numeroprocessocommascara`, `meiocompleto`, `idOrgao`), volume real (até 163 MB por caderno; limite de 1 GB e tmpfs de 1,1 GB), classe da citação vinda do cabeçalho (seção 9), regra de estado da comunicação com anomalia em falha fechada, filtros e janela de limite do `/comunicacao`.
 >
+> **Revisão 7 (24/10/2026)**: Fase 2. API do TJDFT acessível do Brasil (1.766.288 acórdãos em 24/10/2026); spike de estrutura só com agregados (seção 3.3): o filtro `dataPublicacao` usa a data UTC, o dia continua recebendo registros depois de publicado, `localDePublicacao` é `DJE` ou `PJe`, campos extras fora da lista branca. Tabela `classe_cnj` carregada de um arquivo versionado da TPU (seção 4.4).
+>
+> **Revisão 8 (24/10/2026)**: apagamento do conteúdo de acórdãos removidos (seção 4.5), conferência mensal dos dias antigos do TJDFT com as contagens medidas (seção 3.3) e logs em stderr (seção 6.2).
+>
+> **Revisão 9 (24/10/2026)**: Fase 3 sem dados reais: abstração de embeddings, fatiamento e ferramenta de avaliação (seção 7.5); dependências de modelo num grupo opcional.
+>
+> **Revisão 10 (27/10/2026)**: contrato da API (seção 10.1), com mock para o frontend, e detecção do número de processo na consulta (seção 8.2).
+>
+> **Revisão 11 (27/10/2026)**: busca implementada com dados sintéticos (seção 8.8), ramo vetorial atrás de uma interface e desligado até o F3-06; limite de taxa e canal de remoção na API (seções 6.5 e 10.1); liberação de bloqueio só manual (seção 4.5).
+>
+> **Revisão 12 (27/10/2026)**: correção de segurança do IP do cliente no limite de taxa e requisito de implantação (seções 10.1 e 12.2); 404/410 reais no detalhe do acórdão (seção 11.2); Fase 6 com dados sintéticos e Fase 7 sem fontes novas (ajustes por tribunal, perfis de parser, registro de fontes, prioridade configurável, senha padrão recusada em produção).
+>
+> **Revisão 14 (28/10/2026)**: `/filtros` e `/cobertura` fora do limite de taxa, com cache (seção 10.1); RAM mínima de 16 GB em produção, com opção de 8 GB de limites reduzidos; CSP com `'unsafe-inline'` registrada como dívida conhecida (seção 12.2).
+>
+> **Revisão 13 (28/10/2026)**: produção (seção 12.2): compose próprio com o Caddy como único serviço exposto, redes internas, limites de memória, backups agendados; detalhe do acórdão responde 503 com timeout quando a API falha (seção 11.2).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -239,7 +255,11 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 | `termosAcessorios` → `base` | `acordaos` | 1,76 mi registros, **incluindo** os 258.371 de turmas recursais, que vêm com `base = "acordaos"`, `subbase = "acordaos-tr"` e `turmaRecursal = true`. `decisoes` fica fora (traz nomes de partes) |
 | `termosAcessorios` → `dataPublicacao` | um dia (`AAAA-MM-DD`) | Coleta por dia de publicação (ex.: 231 acórdãos em 20/10/2026) |
 
-**Campos consumidos** (`registros`): `uuid`, `identificador`, `base`, `processo`, `nomeRelator`, `descricaoOrgaoJulgador`, `dataJulgamento`, `dataPublicacao`, `ementa`, `decisao`, `codigoClasseCnj`, `segredoJustica`, `subbase`, `turmaRecursal`, `possuiInteiroTeor`. Total em `hits.value`.
+**Resposta** (spike F2-02, `backend/scripts/spike_api_tjdft.py`, só agregados; 2.093 registros de 20, 21 e 22/10/2026): objeto com `hits` (`{value}`), `agregacoes` (listas `{nome, total}` por base, classe, órgão, relator, relator designado, revisor e segredo), `paginacao` (`{pagina, tamanho}`) e `registros`. Uma página depois do fim responde 200 com `registros` vazio. A ordem dos registros foi a mesma em duas consultas da mesma página, e os uuids únicos bateram com `hits.value` nos três dias.
+
+**Campos dos registros**: `sequencial`, `base`, `subbase`, `uuid`, `identificador` (7 dígitos), `dataJulgamento`, `dataPublicacao` (`AAAA-MM-DDThh:mm:ss.sssZ`), `decisao`, `ementa` (texto puro, sem HTML nem entidades; mediana de ~3.400 caracteres), `localDePublicacao` (`DJE` ou `PJe`), `processo` (já com máscara CNJ), `nomeRelator` (maiúsculas, sem título), `relatorAtivo`, `uf`, `segredoJustica` (booleano), `turmaRecursal`, `descricaoOrgaoJulgador` (`3ª Turma Cível`; turmas recursais em maiúsculas), `versao` (texto, `"01"`), `codigoClasseCnj` (inteiro), `codigoSistjOrgaoJulgador`, `marcadores` (`{decisao, ementa, termosAuxiliares}`) e `possuiInteiroTeor` (falso em todos os registros sob segredo). `nomeRelatorDesignado` (~1,4%) e `nomeRevisor` (~0,4%) só aparecem em alguns registros.
+
+**Lista branca do bruto** (o resto é descartado antes de gravar): `uuid`, `identificador`, `base`, `subbase`, `turmaRecursal`, `processo`, `nomeRelator`, `nomeRelatorDesignado`, `nomeRevisor`, `descricaoOrgaoJulgador`, `codigoClasseCnj`, `dataJulgamento`, `dataPublicacao`, `localDePublicacao`, `ementa`, `decisao`, `segredoJustica`, `possuiInteiroTeor`, `versao`, mais os metadados da anonimização. Nunca são gravados `inteiroTeorHtml`, `marcadores`, `jurisprudenciaEmFoco` nem as agregações. Total em `hits.value`.
 
 **Regras**
 
@@ -247,12 +267,16 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 - **Base**: só são aceitos registros com `base = "acordaos"`; os demais são descartados (defesa em profundidade, mesmo com o filtro na requisição). `acordaos-tr` é **subbase**, não base: o filtro `base=acordaos-tr` retorna 0, e `subbase=acordaos-tr` retorna 258.371.
 - **Turma recursal**: identificada por `turmaRecursal = true` ou `subbase = "acordaos-tr"`, e gravada em `acordao.turma_recursal`. Não é critério de aceite.
 - `decisao` (dispositivo) é guardado em coluna separada e **não** entra no embedding no MVP; serve para exibição.
+- **Integridade da paginação** (F2-04): o conector lê todas as páginas do dia em memória (já filtradas e anonimizadas) e confere que os uuids únicos de todos os registros recebidos, inclusive os descartados, batem com `hits.value`, e que `hits.value` não mudou entre as páginas. Se divergir, relê o dia inteiro, até 3 vezes, e então marca a unidade como `erro`. Só depois da conferência os lotes seguem para o bruto e o banco; uma unidade retomada relê o dia inteiro e grava só as páginas depois do checkpoint.
+- **Segredo no relatório**: os registros em segredo são contados em `coleta_janela.descartados_segredo`; nenhum campo deles é gravado. O uuid fica só em memória, para retirar da busca um acórdão já indexado que passou a vir sob segredo (`removido`, motivo "segredo de justiça superveniente").
 
 **Estratégia de coleta**
 
-- **Unidade de coleta**: um dia de `dataPublicacao`, paginado de 40 em 40 até `hits.value`. Não é preciso subdividir: a paginação profunda funciona.
-- **Fuso**: `dataPublicacao` vem em **UTC**. A data gravada é convertida para America/Sao_Paulo. Para não perder registros na virada do dia, a coleta diária consulta o dia mais recente **e reconsulta o dia anterior**, deduplicando por `uuid` (o upsert por `fonte + id_fonte` já garante isso).
-- **Recoleta**: os últimos 30 dias são reconsultados diariamente, para capturar correções e mudanças de segredo (~7 mil registros, ~175 requisições/dia).
+- **Unidade de coleta**: um dia do filtro `dataPublicacao`, paginado de 40 em 40 até `hits.value`. Não é preciso subdividir: a paginação profunda funciona.
+- **Fuso**: `dataPublicacao` e `dataJulgamento` vêm em **UTC**, e o filtro `dataPublicacao` compara a **data UTC** (100% dos 2.093 registros do spike). A maioria é publicada às `03:00Z` (meia-noite em São Paulo), mas 2,2% saem entre 0h e 3h UTC, ou seja, ainda no dia anterior em São Paulo. A data gravada é sempre convertida para America/Sao_Paulo; a unidade de coleta continua sendo a data UTC do filtro. Para não perder registros na virada do dia, a coleta diária consulta o dia mais recente **e reconsulta o dia anterior**, deduplicando por `uuid` (o upsert por `fonte + id_fonte` já garante isso).
+- **Dia ainda aberto**: um dia já publicado continua recebendo registros (20/10/2026 tinha 231 acórdãos no F2-01 e 691 em 24/10), o que reforça a recoleta dos últimos 30 dias.
+- **Recoleta**: os últimos 30 dias são reconsultados diariamente, para capturar correções e mudanças de segredo (~7 mil registros, ~175 requisições/dia). Contagem por dia de publicação dos últimos 60 dias, medida pelo dono do projeto em 24/10/2026 (média dos dias úteis): 502 (0 a 6 dias atrás), 400 (7 a 13, com feriado), 632 (14 a 29) e 572 (30 a 59). Não há sinal de crescimento depois de 30 dias, então a janela de 30 dias é mantida.
+- **Conferência mensal** (F2-14): uma vez por mês, para os dias de 31 a 90 dias atrás, uma requisição de tamanho 1 por dia compara `hits.value` com o total registrado na última coleta (`coleta_janela.total_fonte`); só os dias que mudaram (ou nunca concluídos) são recoletados. São ~60 requisições por mês.
 - **Carga inicial**: últimos 90 dias (alinhado ao DJEN), cerca de 15 mil acórdãos e algumas centenas de requisições.
 - **Carga completa** (fora do MVP): ~1,76 mi registros ÷ 40 ≈ **44 mil requisições** (~12 h a 1 req/s, mais pausas), executada dia a dia, do mais recente ao mais antigo, em horário de baixa carga.
 - **Link oficial**: `https://jurisdf.tjdft.jus.br/acordaos/{uuid}`. Verificado no navegador: a página mostra acórdão, processo, relator, órgão, julgamento, publicação e ementa. O padrão do inteiro teor (`acordaos/{numeroAcordao}/inteiro-teor/{uuid}`) fica registrado para o futuro, mas não é usado no MVP.
@@ -276,7 +300,7 @@ O orquestrador (`ingest.runner`) é genérico: persiste o estado das unidades, a
 ### 3.5 Deduplicação entre fontes
 
 - Dentro de uma fonte: chave única `(fonte, id_fonte)`.
-- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda, o upsert verifica se já existe acórdão de **outra fonte** com o mesmo `numero_processo` e a mesma data de julgamento (ou, na falta dela, de publicação/disponibilização). Se existir, o novo registro é gravado com `duplicata_de` apontando para o existente e não é indexado. Prioridade de fonte: API própria do tribunal > DJEN.
+- Entre fontes: no MVP as fontes não se sobrepõem (TJDFT fora do DJEN). Como salvaguarda (F2-09), o upsert verifica se já existe acórdão **ativo** de **outra fonte** com o mesmo `numero_processo` e a mesma `data_referencia` (data de julgamento ou, na falta dela, de publicação/disponibilização). Prioridade de fonte: API própria do tribunal > DJEN (`ingest.upsert.ORDEM_PADRAO`), configurável por tribunal em `prioridade_fontes` (F7-05). O de menor prioridade fica `duplicado`, com `duplicata_de` apontando para o outro, e não é indexado, seja ele o novo (o DJEN que chega depois do TJDFT) ou o que já estava no banco (o TJDFT que chega depois marca o DJEN). Só um acórdão `ativo` torna o outro duplicado: um TJDFT em quarentena não esconde o DJEN.
 
 ---
 
@@ -325,6 +349,8 @@ CREATE TABLE acordao (
     classe_citacao           text,                   -- DJEN: classe do cabeçalho (usada na citação)
     relator                  text,                   -- forma de exibição
     relator_chave            text,                   -- normalizado p/ filtro (sem títulos/acentos, minúsculo)
+    relator_designado        text,                   -- TJDFT: nomeRelatorDesignado (citação: "Rel. p/ acórdão")
+    relator_designado_chave  text,
     turma_recursal           boolean,
     possui_inteiro_teor      boolean,
 
@@ -332,6 +358,7 @@ CREATE TABLE acordao (
     data_julgamento          date,                   -- TJDFT: dataJulgamento | DJEN: "Data do Julgamento" do cabeçalho
     data_publicacao          date,                   -- TJDFT: dataPublicacao | DJEN: nula (não é calculada)
     data_disponibilizacao    date,                   -- DJEN: data_disponibilizacao
+    local_publicacao         text,                   -- TJDFT: localDePublicacao ("DJE" ou "PJe"), para a citação
     data_referencia          date GENERATED ALWAYS AS
                              (coalesce(data_julgamento, data_publicacao, data_disponibilizacao)) STORED,
 
@@ -412,10 +439,10 @@ CREATE INDEX acordao_trecho_hnsw ON acordao_trecho
 | Tabela | Conteúdo |
 |---|---|
 | `caderno_djen` | Estado de cada caderno: `tribunal`, `data`, `versao`, `hash`, `bytes`, `status` (`pendente`, `em_andamento`, `processado`, `sem_caderno`, `erro`), `total_fonte` (campo `total`), `comunicacoes_lidas`, `acordaos_aceitos`, `rejeitados_anonimizacao` (lista dos `id` das comunicações recusadas pela falha segura, nunca o conteúdo), `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `verificado_em`, `iniciado_em`, `processado_em`. Único em `(tribunal, data)`. |
-| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (ex.: segredo de justiça), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
+| `coleta_janela` | Checkpoint das fontes paginadas (TJDFT): `fonte`, `tribunal`, `data_inicio`, `data_fim`, `status` (`pendente`, `em_andamento`, `concluida`, `erro`), `total_fonte`, `ultima_pagina`, `itens_recebidos`, `itens_aceitos`, `itens_descartados` (segredo de justiça e base diferente de `acordaos`), `descartados_segredo` (só a contagem dos que vieram sob segredo), `rejeitados_anonimizacao`, `falhas_parser`, `quarentena`, `cancelados`, `bloqueados`, `anomalias` (estado da fonte não reconhecido), `respostas_429`, `tentativas`, `ultimo_erro`, `versao_parser`, `iniciada_em`, `concluida_em`. Único em `(fonte, tribunal, data_inicio, data_fim)`. |
 | `coleta_bruta` | Metadados de cada arquivo bruto **filtrado**: origem (`caderno_djen_id` ou `coleta_janela_id` + `pagina`), `caminho_arquivo`, `sha256`, `bytes`, `itens`, `recebida_em`, `versao_parser`. Arquivos em `data/raw/{fonte}/{tribunal}/…` (volume Docker). |
 | `acordao_historico` | Versões anteriores de um acórdão quando `hash_conteudo` muda: `acordao_id`, `versao`, `snapshot` (jsonb dos campos normalizados), `substituido_em`. |
-| `classe_cnj` | `codigo`, `nome`, `codigo_pai`, carregada da TPU/CNJ. |
+| `classe_cnj` | `codigo`, `nome`, `codigo_pai`, `sigla`, `ativa`, `tpu_referencia`, carregada da TPU/CNJ pela migração 0006 a partir de `buscajus/db/dados/tpu_classes.json` (arquivo versionado com a data de referência, gerado por `backend/scripts/atualizar_tpu.py`; sem o glossário e sem os campos de auditoria, que identificam servidores do CNJ). Classes que saem da TPU não são apagadas. |
 | `bloqueio` | Conteúdo removido a pedido ou por decisão interna: `fonte`, `id_fonte` **ou** `numero_processo`, `motivo`, `pedido_remocao_id`, `criado_em`. Consultado no upsert para impedir reinserção na recoleta. |
 | `pedido_remocao` | Canal de remoção: `acordao_id`/`numero_processo`, `motivo`, `contato` (e-mail do solicitante, apagado após a retenção), `status` (`pendente`, `aceito`, `rejeitado`), `decisao`, `criado_em`, `resolvido_em`. |
 | `tarefa` | Fila simples em Postgres (`tipo`, `payload`, `status`, `agendada_para`, `tentativas`, `ultimo_erro`), consumida com `FOR UPDATE SKIP LOCKED`. |
@@ -441,6 +468,10 @@ Para cada `AcordaoNormalizado`:
 
 Acórdãos cancelados **não são apagados** (rastreabilidade); apenas deixam de aparecer na busca e no detalhe (o detalhe responde 410 com aviso de cancelamento).
 
+**Removidos** (F2-13, `ingest.remocao.remover`; segredo superveniente no TJDFT e pedido de remoção aceito): além de `situacao = 'removido'`, o conteúdo é apagado. Cria-se um `bloqueio` por fonte + id (nenhuma recoleta nem reprocessamento reinsere o acórdão); ementa e decisão são apagadas em `acordao` e nos snapshots de `acordao_historico`; os trechos são apagados (F3-09); e os arquivos brutos em que o registro pode estar (o da última coleta e todos os dos diretórios das unidades do dia, registrados ou não) são reescritos sem ele, com `coleta_bruta` atualizada. Um item bloqueado que reaparece numa coleta ou num reprocessamento não é gravado no banco e sai do arquivo bruto do lote. Fica no banco só o registro de que o acórdão existiu (número, datas, links, motivo).
+
+**Liberação só manual**: o bloqueio não é desfeito por nenhum processo automático, nem quando a fonte tira o segredo de justiça de um acórdão. Liberar um acórdão removido exige ação manual (apagar o `bloqueio` no banco e recoletar a unidade com `--forcar`), registrada fora do sistema.
+
 Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha nova com `INSERT … ON CONFLICT (fonte, id_fonte) DO NOTHING` (corrida entre transações vira atualização); o snapshot do histórico é `to_jsonb` da linha sem `busca_tsv`. `removido` e `duplicado` não são desfeitos pela recoleta. O reprocessamento sem rede (`buscajus ingest reprocessar`) relê o bruto da versão corrente do caderno e refaz normalização, PII e upsert; a camada 1 não pode ser refeita daí, porque os destinatários nunca são gravados.
 
 ---
@@ -451,7 +482,7 @@ Implementação (`ingest.upsert`): `SELECT … FOR UPDATE` da linha atual; linha
 
 O `texto` é HTML com entidades (`&Atilde;`, `&ccedil;`, `&nbsp;`…), contendo uma tabela de cabeçalho com **Processo**, **Relator(a)** e **Data do Julgamento**, seguida da ementa. A data de julgamento estava presente em 100% dos 1.536 acórdãos do caderno TJPR de 15/10/2026. O parser recebe o `texto` já anonimizado (seção 6.3).
 
-Etapas (`ingest.djen.parser`, com `versao_parser` registrada):
+Etapas (`ingest.djen.parser`, com `versao_parser` registrada). As variações de HTML entre tribunais ficam num `PerfilParser` (rótulos do cabeçalho e tamanho mínimo da ementa), escolhido pela sigla do tribunal; o do TJPR é o padrão (F7-02):
 
 1. **Decodificação**: `html.unescape` (cobre entidades nomeadas e numéricas); trata entidades duplamente escapadas (`&amp;Atilde;`) com uma segunda passada condicional.
 2. **Parsing**: `lxml.html`, tolerante a HTML malformado.
@@ -502,7 +533,7 @@ Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Mó
 | Verificação de PII residual | Varredura final da ementa normalizada (seção 6.4). |
 | Upsert | Respeito a `bloqueio` (remoções) e a segredo superveniente. |
 | Checagens pontuais | O endpoint `/comunicacao` é usado só para conferir uma comunicação específica; da resposta só se leem os campos de estado (`ativo`, `status`, `data_cancelamento`), e ela não é gravada. |
-| Logs | Não registrar conteúdo de comunicações nem termos de busca completos em logs persistentes; métricas de busca são agregadas. Retenção de logs de acesso: curta (ex.: 30 dias). |
+| Logs | Não registrar conteúdo de comunicações nem termos de busca completos em logs persistentes; métricas de busca são agregadas. Retenção de logs de acesso: curta (ex.: 30 dias). Os logs (JSON, uma linha por evento) vão para stderr; a saída padrão da CLI é só o resultado. |
 
 ### 6.3 Anonimização de nomes no texto
 
@@ -521,6 +552,8 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 - A substituição usa iniciais com ponto, ignorando partículas (`JOSÉ DA SILVA SANTOS` → `J.S.S.`), como os próprios tribunais costumam fazer.
 - O casamento é tolerante: comparação sem acentos e sem diferença de caixa, feita sobre os nós de texto do HTML (com as entidades já decodificadas) e re-serializada, para o `texto` continuar sendo HTML válido. Casa o nome completo e também subsequências de dois ou mais tokens (ex.: primeiro e último nome). Um token isolado não é substituído nessa camada, para evitar falsos positivos com sobrenomes comuns; esses casos ficam para a camada 2.
 - O nome do relator e os rótulos do cabeçalho não são alterados: as linhas de metadados do cabeçalho (processo, relator, órgão julgador, data) ficam fora das camadas de nomes, e o nome do relator fica protegido também no corpo (citações). Na substituição, o texto é decodificado (inclusive entidades escapadas duas vezes) e o HTML é re-serializado com os caracteres em Unicode.
+
+**TJDFT** (`ingest.tjdft.anonimizacao`): a API não traz partes, então não há camada 1. A ementa e a decisão passam pela camada 2 (mesma interface `DetectorPessoas` e mesmas exceções; os magistrados do próprio acórdão, `nomeRelator`, `nomeRelatorDesignado` e `nomeRevisor`, ficam protegidos) e pelo mascaramento de CPF; se sobrar CPF, o registro é recusado e só o uuid é contado. Sem NER configurado, a coleta do TJDFT não é criada.
 
 **Mascaramento de CPF (DJEN e TJDFT)**
 
@@ -566,8 +599,9 @@ Se encontrar algo, o acórdão vai para `quarentena` (não indexado, não exibid
 ### 6.5 Canal de remoção
 
 - Página pública `/remocao` com formulário (número do processo ou link do resultado, motivo, e-mail de contato) e um e-mail de contato exibido como texto.
-- `POST /api/v1/remocao` grava em `pedido_remocao`. O e-mail do solicitante é usado só para responder e é apagado após a resolução e o prazo de retenção.
-- Remoção aceita → `bloqueio` + `situacao = 'removido'` + trechos apagados. A recoleta não reinsere.
+- `POST /api/v1/remocao` grava em `pedido_remocao`. A referência é o número completo do processo (com ou sem máscara) ou o link do resultado (`/acordao/{id}`); outra coisa → 422 `referencia_invalida`. O e-mail do solicitante é usado só para responder e é apagado `api.retencao_contato_dias` (90) dias após a resolução (`buscajus remocao limpar-contatos`).
+- Decisão: `buscajus remocao listar`, `aceitar ID --decisao …` ou `rejeitar ID --decisao …` (F4-12). Um pedido por número remove todos os acórdãos do processo e cria um bloqueio por `numero_processo`, que também barra acórdãos do processo coletados depois.
+- Remoção aceita → regra geral da seção 4.5 (`ingest.remocao.remover`): `bloqueio`, `situacao = 'removido'`, ementa e decisão apagadas no banco e no histórico, trechos apagados e arquivos brutos reescritos sem o registro. A recoleta não reinsere.
 - A página `/privacidade` descreve os dados tratados, a base legal, as fontes e o canal de remoção.
 
 ### 6.6 Verificações automatizadas
@@ -623,6 +657,13 @@ O modelo **não está fixado**. Candidatos avaliados na Fase 3:
 
 Nova coluna/tabela com a nova dimensão → job preenche em paralelo → avaliação → a configuração `modelo_ativo` muda → trechos antigos removidos. A API usa sempre o mesmo modelo para a consulta e para os trechos consultados.
 
+### 7.5 Implementação (F3-02 a F3-04)
+
+- **Abstração** (`buscajus.embed.embedder`): `Embedder` com `nome` (`modelo@revisão`, o valor de `acordao_trecho.modelo`), `dimensao`, `max_tokens`, `tokenizador`, `embed_consultas` e `embed_passagens`, que devolvem vetores `float32` com norma L2 1. Prefixos por família: e5 usa `query: `/`passage: `; os demais candidatos, nenhum. `EmbedderSentenceTransformers` carrega o modelo local, processa em lotes (`embeddings.tamanho_lote`) e usa GPU se houver (`embeddings.dispositivo = auto`).
+- **Dependências**: `sentence-transformers` e `torch` (CPU, do índice do PyTorch) ficam no grupo opcional `embeddings` (`uv sync --group embeddings`), fora do sync padrão e da imagem até o F3-12. Os testes com modelo real usam um modelo de teste de ~17 MB com revisão fixada, sob o marcador `modelo`, num job separado do CI.
+- **Fatiamento** (`buscajus.embed.fatiamento`): até `tokens_por_trecho` (450) tokens do próprio modelo, um trecho; acima disso, janelas com `sobreposicao_tokens` (50) em comum, cortadas pelas posições dos tokens no texto original.
+- **Avaliação** (`buscajus eval pool|metricas`): monta um índice temporário com os acórdãos ativos do banco: um sistema vetorial em memória por modelo (cada acórdão pontuado pelo melhor trecho) e o full-text do Postgres (OR entre lexemas, `ts_rank_cd`). O `pool` exporta o top-20 de cada sistema em CSV para julgamento (0 a 2), e o `metricas` calcula nDCG@10, Recall@50, MRR e latência p50/p95 com a planilha julgada. O CSV traz o início das ementas e é arquivo de trabalho, fora do repositório. O conjunto de consultas (F3-01) é `backend/eval/consultas.yaml`, ainda pendente de revisão jurídica.
+
 ---
 
 ## 8. Busca híbrida
@@ -652,6 +693,7 @@ flowchart TD
 - Se a consulta contiver um número **e** outros termos → o número vira filtro e o restante segue para a busca híbrida.
 - Número parcial (ex.: `0011412-20.2025`) → busca por prefixo dos dígitos, limitada.
 - Endpoint dedicado `GET /api/v1/processos/{numero}` para links diretos.
+- Implementação (`buscajus.api.consulta`): a consulta é normalizada (NFC, sem caracteres de controle, espaços simples, até 500 caracteres). Um número completo pode vir com a máscara inteira, parcial ou sem nenhuma; um prefixo exige a máscara a partir de `NNNNNNN-DD` (só 7 dígitos seria ambíguo). Palavras como "processo", "autos" e "nº" em volta do número não contam como texto. Número colado a outros dígitos não é número de processo; só o primeiro número da consulta é usado.
 
 ### 8.3 Ramo vetorial
 
@@ -691,6 +733,15 @@ LIMIT 100;
 
 `tribunal`, `orgao_julgador`, `classe` (código CNJ), `relator` (por `relator_chave`, com sugestão por trigrama), período (`data_inicio`/`data_fim` sobre `data_referencia`, que prioriza a data de julgamento). Os filtros valem igualmente nos dois ramos. `GET /api/v1/filtros` devolve os valores disponíveis (com cache).
 
+### 8.8 Implementação (Bloco N)
+
+- `buscajus.busca.servico.ServicoPostgres`: consulta que é só número de processo → busca exata ou por prefixo (`busca.filtros` + ordem por `data_referencia` desc); senão, ramo full-text (`busca.texto`) e ramo vetorial (`busca.vetorial`) fundidos por RRF (`busca.fusao`), até 200 resultados, páginas de 20. Número junto com outros termos vira filtro nos dois ramos.
+- O ramo vetorial entra pela interface `RamoVetorial` e fica desligado (`RamoVetorialDesligado`, que não devolve nada) até o modelo ser fixado (F3-06) e existir `acordao_trecho` (F3-07). Até lá a busca "híbrida" é só full-text, com a mesma fusão.
+- Trecho: `ts_headline` com delimitadores de uso privado, trocados por `<mark>` depois de escapar o texto (o `ts_headline` já descarta as tags da ementa); sem termo destacado, o começo da ementa, escapado.
+- Citação: `busca.citacao.citar` (seção 9), na resposta de busca, detalhe e processo.
+- Detalhe: 410 para `cancelado` (com o link oficial) e `removido`; 404 para inexistente, `quarentena` e `duplicado`.
+- Parâmetros em `busca.*` (`rrf_k`, `peso_texto`, `peso_vetor`, `top_ramo`, `limite_prefixo`, `cache_filtros_segundos`), ajustados no F6-07.
+
 ### 8.7 Desempenho esperado (MVP)
 
 Com ~250–350 mil ementas (após a carga histórica do TJPR): full-text e HNSW em dezenas de ms; embedding da consulta em CPU (e5-base) em ~30–80 ms. Meta: p95 < 500 ms sem reordenação. Cache de embeddings de consultas repetidas (LRU em memória).
@@ -705,14 +756,15 @@ Gerada no backend (fonte única da regra) e devolvida em cada resultado no campo
 
 ```
 DJEN:  {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator}[, j. {dd/mm/aaaa}], DJEN de {dd/mm/aaaa}.
-TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator}[, j. {dd/mm/aaaa}][, publ. {dd/mm/aaaa}].
+TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel. {relator} | Rel. p/ acórdão {designado}[, j. {dd/mm/aaaa}][, publ. {local} {dd/mm/aaaa}].
 ```
 
 **Exemplos**
 
 - TJPR (DJEN): *TJPR, 3ª Turma Recursal dos Juizados Especiais, Recurso Inominado nº 0011412-20.2025.8.16.0069, Rel. Fulano de Tal, j. 06/10/2026, DJEN de 14/10/2026.*
 - TJPR sem data de julgamento: *TJPR, 3ª Turma Recursal dos Juizados Especiais, Recurso Inominado nº 0011412-20.2025.8.16.0069, Rel. Fulano de Tal, DJEN de 14/10/2026.*
-- TJDFT: *TJDFT, 3ª Turma Cível, Apelação Cível nº 0701234-56.2023.8.07.0001, Rel. Des. Fulano de Tal, j. 08/10/2026, publ. 15/10/2026.*
+- TJDFT: *TJDFT, 3ª Turma Cível, Apelação Cível nº 0701234-56.2023.8.07.0001, Rel. Fulano de Tal, j. 08/10/2026, publ. PJe 21/10/2026.*
+- TJDFT com relator designado: *TJDFT, 1ª Câmara Criminal, Apelação Criminal nº 0701234-56.2023.8.07.0001, Rel. p/ acórdão Beltrana de Tal, j. 02/10/2026, publ. DJE 14/10/2026.*
 
 **Regras**
 
@@ -722,6 +774,9 @@ TJDFT: {TRIBUNAL}, {órgão julgador}, {classe} nº {número com máscara}, Rel.
 - Partes ausentes são omitidas junto com o separador (nunca "Rel. null").
 - Datas em `dd/mm/aaaa`; número sempre com máscara; classe por extenso.
 - `{classe}` é `classe_citacao`: no DJEN, a classe entre parênteses na célula "Processo" do cabeçalho do acórdão, que é a classe do recurso julgado; `nomeClasse` difere dela em 44% das ementas do TJPR (F1-01) e fica em `classe_nome`, só para filtros. Sem `classe_citacao`, usa `classe_nome`.
+- TJDFT: `{classe}` é `classe_citacao`, o nome da classe resolvido pela TPU (`classe_cnj`) a partir de `codigoClasseCnj`. A API traz o relator sem título (em maiúsculas, convertido para *title case*), então a citação não acrescenta `Des.`/`Juiz`.
+- TJDFT com `nomeRelatorDesignado` (relator original vencido): `Rel. p/ acórdão {designado}` no lugar de `Rel. {relator}`. Os dois ficam guardados (`relator` e `relator_designado`).
+- TJDFT: `j.` com `dataJulgamento` e `publ. {local} {data}` com `localDePublicacao` (`DJE` ou `PJe`) e `dataPublicacao`, ambas convertidas de UTC para America/Sao_Paulo. Sem local, só `publ. {data}`.
 - O frontend copia a string exatamente como veio da API.
 
 ---
@@ -739,6 +794,16 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 | `GET` | `/relatores?prefixo=` | Sugestão de relatores |
 | `POST` | `/remocao` | Pedido de remoção |
 | `GET` | `/saude` | Health check (DB + modelo carregado) |
+
+### 10.1 Contrato (F4-01)
+
+- Esquemas em `buscajus.api.esquemas`; o OpenAPI fica versionado em `frontend/openapi.json` (gerado por `buscajus api openapi`), e um teste falha se o contrato mudar sem regenerar o arquivo. O frontend gera os tipos a partir dele (F5-01).
+- Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`; 422 `consulta_vazia`, `periodo_invalido`, `numero_invalido`, `referencia_invalida`; 429 `limite_excedido`, com `Retry-After`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
+- `/busca` devolve `consulta` (normalizada), `tipo` (`hibrida` ou `processo`), `numero_processo` detectado, `filtros`, `pagina` (1 a 10), `por_pagina` (20), `total` (até 200) e `resultados`. O `trecho` é a ementa escapada, e o único HTML possível é `<mark>`.
+- O serviço real é `busca.servico.ServicoPostgres` (seção 8.8). Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar sem banco.
+- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, detalhe, processo e relatores, e `api.remocoes_por_hora` (5) para a remoção. `/filtros` e `/cobertura` ficam fora do limite: não recebem entrada do usuário e têm cache (`busca.cache_filtros_segundos`, 300 s), então não custam consultas ao banco; antes, cada página `/busca` (que chama `/filtros` e `/busca`) gastava duas unidades e o limite efetivo caía a 30 buscas por minuto. `/saude` e `/acordaos/{id}/situacao` também ficam fora. A contagem é por processo da API; com vários processos, cada um conta o seu. No máximo `api.max_ips_limitador` (100 mil) IPs são acompanhados; acima disso, os menos recentes são descartados.
+- **IP do cliente**: com `api.proxies_confiaveis = N > 0`, é o N-ésimo item **a partir da direita** do `X-Forwarded-For` (o que os nossos proxies acrescentaram); os itens à esquerda vêm do cliente e podem ser falsificados. Com 0, ou com o cabeçalho ausente, curto ou malformado, vale o IP da conexão. Requisito de implantação na seção 12.2.
+- `GET /acordaos/{id}/situacao` devolve só a situação (`ativo`, `cancelado`, `removido`; 404 para o resto), sem o texto e fora do limite de taxa: o site a usa para responder 404/410 antes de renderizar.
 
 Item de resultado:
 
@@ -774,6 +839,24 @@ Item de resultado:
 - Acessibilidade (WCAG AA), responsivo, sem rastreadores de terceiros.
 - Consome a API pelo OpenAPI gerado (tipos TypeScript gerados a partir do schema).
 
+### 11.1 Implementação (Bloco O)
+
+- **Dados no servidor**: as páginas chamam a API no servidor do Next.js (`src/api/cliente.ts`, `openapi-fetch` com os tipos gerados), em `API_URL`, lida em tempo de execução. O navegador não fala com a API; a única exceção, a sugestão de relator, passa por um route handler do próprio site (`/api/relatores`).
+- **IP do usuário**: o Next.js repassa à API **só o último item** do `X-Forwarded-For` recebido, o que o proxy reverso (Caddy) acrescentou; nunca a lista inteira, cujos itens anteriores vêm do cliente. A API conta 1 proxy confiável (`api.proxies_confiaveis = 1` em produção). Requisito de implantação na seção 12.2.
+- **Busca**: formulário GET (`next/form`); a URL é o estado (`/busca?q=…&tribunal=…&pagina=…`) e tudo funciona sem JavaScript. Com `cacheComponents`, o que lê `searchParams` fica num `Suspense`: a página é um prerender parcial, com os resultados em streaming.
+- **Trecho**: a API manda o texto escapado com `<mark>`; o frontend ainda troca qualquer `<` que não seja de `<mark>`/`</mark>` antes de inserir o HTML.
+- **Contrato**: `pnpm build` confere se `src/api/esquema.ts` corresponde a `frontend/openapi.json` (`pnpm api:gerar` regenera).
+- **Testes**: Vitest + Testing Library (`pnpm test`), com dados sintéticos; componentes assíncronos de servidor ficam para os testes E2E (F6-09).
+- **Dependências**: o pnpm só instala versões publicadas há pelo menos 14 dias (`minimumReleaseAge`); as versões que já estavam no lockfile antes da regra estão listadas em `minimumReleaseAgeExclude`.
+
+### 11.2 Implementação (Bloco P)
+
+- **Detalhe** (`/acordao/[id]`): renderizado no servidor, com título por acórdão. Como o conteúdo vem em streaming (prerender parcial), o status HTTP sairia sempre 200; por isso um Proxy do Next (`src/proxy.ts`), restrito a `/acordao/:id`, consulta `GET /acordaos/{id}/situacao` antes de renderizar. Inexistente (ou id inválido) → HTML de `/nao-encontrado` com **404**; cancelado ou removido → a página de aviso (com o link oficial, se cancelado) com **410**; ativo → segue normalmente; API fora do ar, lenta (acima de `API_TIMEOUT_SITUACAO_MS`, 3 s), com erro ou resposta inesperada → HTML de `/indisponivel` com **503**, `Retry-After: 30` e `no-store`, sem nenhum detalhe do erro (se nem a página local responder, texto simples com o mesmo status). As chamadas das páginas à API têm timeout próprio (`API_TIMEOUT_MS`, 8 s), depois do qual a página mostra o estado de erro. Navegações internas do roteador (cabeçalho `RSC`) e Server Actions não passam pela conferência.
+- **Processo** (`/processo/[numero]`): número com ou sem máscara, ou prefixo; cartões do mais recente ao mais antigo.
+- **Remoção** (`/remocao`): server action que chama `POST /api/v1/remocao` no servidor; funciona sem JavaScript. `?referencia=` vem preenchido a partir do detalhe. O e-mail de contato do projeto aparece como texto quando `CONTATO_EMAIL` está configurado no `web`.
+- **Institucionais**: `/sobre` e `/privacidade` são rascunhos pendentes de revisão (F5-10); a cobertura por tribunal e período passa a vir da base no F7-04.
+- **Acessibilidade**: axe-core nos testes (sem violações sérias ou críticas nas páginas e componentes síncronos); o contraste vem dos tokens de cor, porque o jsdom não o mede.
+
 ---
 
 ## 12. Infraestrutura
@@ -787,7 +870,7 @@ Item de resultado:
 | `worker` | mesma imagem da `api` | Agendador interno (caderno diário, checagem de versões, TJDFT) + job de embeddings; carrega também o modelo de NER |
 | `web` | Node 20 | Next.js |
 
-**Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` uma coleta diária por tribunal do DJEN a partir do horário configurado (padrão 9h, America/Sao_Paulo) e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. A coleta diária revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
+**Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` as coletas diárias que o worker sabe executar e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. DJEN: uma por tribunal, a partir de `horario_djen` (padrão 9h, America/Sao_Paulo); revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. TJDFT (com `tjdft.ativo`): uma por dia, a partir de `horario_tjdft` (8h); recoleta do dia mais recente até `dias_recoleta_tjdft` (30) dias atrás, o que cobre a reconsulta do dia anterior, as mudanças de segredo e os registros publicados com atraso. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
 
 Volumes: `pgdata`, `raw` (brutos filtrados), `models` (cache de pesos do Hugging Face). Área temporária `tmp-cadernos` montada como **tmpfs** no `worker`, dimensionada para o maior caderno aceito (um caderno por vez; tmpfs de 1.100 MB para o limite de 1 GB; o maior caderno do TJPR visto no F1-01 tem 163 MB). O tmpfs só ocupa RAM com o ZIP em uso; não é persistido e fica fora de backup.
 
@@ -795,7 +878,22 @@ Configuração por variáveis de ambiente (`.env`, com `.env.example` versionado
 
 ### 12.2 Produção do MVP
 
-Um único servidor próprio ou VPS de baixo custo (ex.: 4 vCPU, 8–16 GB de RAM, SSD), rodando o mesmo Compose com proxy reverso (Caddy, TLS automático). Backups diários do Postgres (`pg_dump` comprimido) para outro disco ou host. Sem serviços gerenciados pagos.
+Um único servidor próprio ou VPS de baixo custo no Brasil (4 vCPU, 16 GB de RAM, SSD de 80 GB; opção de 8 GB com limites reduzidos, `compose.prod.8gb.yaml`, sem embeddings na `api`), rodando o `compose.prod.yaml` (F8-01), independente do Compose de desenvolvimento. Sem serviços gerenciados pagos. Guia em [docs/implantacao.md](docs/implantacao.md) e checklist em [docs/lancamento.md](docs/lancamento.md).
+
+- **Serviços e redes**: `caddy` é o único com portas (80, 443 TCP/UDP). Redes `borda` (Caddy ↔ `web`) e `interna` (`web`, `api`, `db`, `worker`, `backup`, `migracoes`) são `internal`, sem saída para a internet; só o `worker` está também na rede `saida`, para as fontes. O Caddy não alcança a API nem o banco.
+- **Caddy** (`ops/caddy/Caddyfile`): TLS automático para `DOMINIO`; HSTS, CSP (`'self'` com `'unsafe-inline'` em scripts e estilos, que o Next usa na hidratação; nada de outra origem), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`; log de acesso sem query string, `Referer`, cookies e `Location`, com IP truncado (/24, /48), seguindo a política do F0-12.
+- **Limites de memória**: `db` 2 GB, `api` 2,5 GB, `worker` 3,5 GB (o tmpfs de 1.100 MB conta no limite do contêiner), `web` 512 MB, `backup` e `migracoes` 512 MB, `caddy` 256 MB. Os serviços permanentes somam 8,75 GB (mais o `backup`), daí o mínimo de 16 GB de RAM. Todos com `restart: unless-stopped` e rotação de logs; healthchecks em todos os serviços HTTP, no `db` e no `backup`.
+- **Uvicorn sem `--proxy-headers`**: o IP do cliente vem só de `ip_do_cliente` (`proxies_confiaveis`); o uvicorn não reescreve a conexão a partir do `X-Forwarded-For`.
+- **Dívida conhecida: CSP com `'unsafe-inline'` em `script-src`.** O Next.js injeta scripts inline na hidratação (dados do RSC) e, sem nonce, a CSP precisa liberá-los. O risco é aceito no MVP porque o site não exibe HTML vindo de usuário: o conteúdo é texto das fontes oficiais renderizado pelo React (escapado), e a única inserção de HTML é o trecho da busca, em que a API escapa o texto e só acrescenta `<mark>`, e o frontend ainda troca qualquer `<` que não seja de `<mark>`/`</mark>` (seções 8.8 e 11.1). Caminho para remover: gerar um nonce por requisição no `src/proxy.ts` (estendido a todas as rotas), mandar a CSP com `'nonce-…'` e `'strict-dynamic'` pelo próprio Next (que aplica o nonce aos seus scripts quando o lê do cabeçalho) e tirar a CSP do Caddyfile. O custo é que toda página passa a ser renderizada por requisição: perde-se o prerender parcial (`cacheComponents`) das páginas estáticas, o que pede medir a latência antes.
+- **Backups**: serviço `backup` (`ops/backup-servico.sh`) com `pg_dump` diário às `BACKUP_HORA_UTC`, retenção `BACKUP_RETENCAO_DIAS` e healthcheck que acusa backup com mais de 26 horas; cópia para fora do servidor por cron do usuário de operação (rsync ou rclone com cifragem); restauração em docs/backup.md.
+
+**Requisito de implantação (limite de taxa por IP)**:
+
+- Só o proxy reverso (Caddy) é exposto à internet. O Next.js (`web`) e a API (`api`) **não** podem ser acessíveis diretamente: ficam numa rede interna do Compose, sem portas publicadas no host (ou publicadas só em `127.0.0.1`).
+- O Caddy define o `X-Forwarded-For` com o IP real do cliente. Substituindo o cabeçalho recebido ou acrescentando ao fim dele, o último item é sempre o que o Caddy pôs (o IP da conexão), e é só esse item que o Next repassa à API. Não configure `trusted_proxies` no Caddy, a não ser que haja outro proxy nosso à frente dele (e então ajuste `proxies_confiaveis`).
+- Na API: `BUSCAJUS_API__PROXIES_CONFIAVEIS=1` em produção. No Compose de desenvolvimento, sem proxy, `0` (vale o IP da conexão, e todos os usuários locais dividem o limite).
+- Se o Next ou a API ficassem expostos, um cliente poderia mandar o próprio `X-Forwarded-For` e escapar do limite. Por isso a regra acima é obrigatória.
+- `BUSCAJUS_AMBIENTE=producao`: a configuração recusa a senha padrão de desenvolvimento do banco (F7-09).
 
 Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; vetores 768-d ~0,8–1,1 GB + HNSW de tamanho similar; brutos filtrados na casa de centenas de MB. Tráfego do DJEN: ~57–163 MB/dia por tribunal (F1-01), mais os cadernos rebaixados por mudança de versão.
 

@@ -1,0 +1,131 @@
+{
+  "hits": {
+    "value": 41
+  },
+  "agregacoes": {
+    "base": [
+      {
+        "nome": "acordaos",
+        "total": 41,
+        "filhos": [
+          {
+            "nome": "acordaos",
+            "total": 35
+          },
+          {
+            "nome": "acordaos-tr",
+            "total": 6
+          }
+        ]
+      }
+    ],
+    "classe": [
+      {
+        "nome": "Apelação Cível",
+        "total": 12
+      },
+      {
+        "nome": "Agravo de Instrumento",
+        "total": 6
+      },
+      {
+        "nome": "Agravo Interno Cível",
+        "total": 6
+      },
+      {
+        "nome": "Apelação Criminal",
+        "total": 6
+      },
+      {
+        "nome": "Recurso Inominado Cível",
+        "total": 6
+      },
+      {
+        "nome": "Embargos de Declaração Cível",
+        "total": 5
+      }
+    ],
+    "orgaoJulgador": [
+      {
+        "nome": "6ª Turma Cível",
+        "total": 12
+      },
+      {
+        "nome": "3ª Turma Cível",
+        "total": 11
+      },
+      {
+        "nome": "1ª Turma Cível",
+        "total": 6
+      },
+      {
+        "nome": "2ª Turma Criminal",
+        "total": 6
+      },
+      {
+        "nome": "SEGUNDA TURMA RECURSAL",
+        "total": 6
+      }
+    ],
+    "relator": [
+      {
+        "nome": "ARISTÓBULO VENTANILHA QUARESMEIRO",
+        "total": 17
+      },
+      {
+        "nome": "DEOCLECIANA MORGADÃO TRAVESSEIRO",
+        "total": 12
+      },
+      {
+        "nome": "HERMENEGILDO SOUTELO VILARONGO",
+        "total": 6
+      },
+      {
+        "nome": "OTACÍLIO VENTANILHA BRUSQUETO",
+        "total": 6
+      }
+    ],
+    "relatorDesignado": [],
+    "revisor": [],
+    "segredoJustica": [
+      {
+        "nome": 0,
+        "total": 41
+      }
+    ]
+  },
+  "paginacao": {
+    "pagina": 1,
+    "tamanho": 40
+  },
+  "registros": [
+    {
+      "sequencial": 7060,
+      "base": "acordaos",
+      "subbase": "acordaos",
+      "uuid": "0f1c7e00-2099-4000-8000-000000000060",
+      "identificador": "9900060",
+      "dataJulgamento": "2026-10-07T03:00:00.000Z",
+      "dataPublicacao": "2026-10-16T03:00:00.000Z",
+      "decisao": "CONHECIDO. DESPROVIDO. UNÂNIME.",
+      "ementa": "PENAL. APELAÇÃO CRIMINAL. FURTO QUALIFICADO. DOSIMETRIA. PENA-BASE. 1. A valoração negativa de circunstância judicial exige fundamentação concreta. 2. Valor discutido de R$ 60.250,00, conforme a planilha dos autos. 3. Recurso conhecido e desprovido.",
+      "localDePublicacao": "PJe",
+      "processo": "0000060-12.2099.8.07.9999",
+      "nomeRelator": "HERMENEGILDO SOUTELO VILARONGO",
+      "relatorAtivo": true,
+      "uf": "DF",
+      "segredoJustica": false,
+      "turmaRecursal": false,
+      "descricaoOrgaoJulgador": "2ª Turma Criminal",
+      "versao": "01",
+      "codigoClasseCnj": 417,
+      "codigoSistjOrgaoJulgador": 202,
+      "marcadores": {
+        "decisao": [],
+        "ementa": [],
+        "termosAuxiliares": []
+      },
+      "possuiInteiroTeor": true
+    }
+  ]
+}

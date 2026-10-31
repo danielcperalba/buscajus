@@ -3,6 +3,9 @@
 Política (ARCHITECTURE.md, seção 6.2): nunca registrar o conteúdo de comunicações,
 ementas, nomes de destinatários, URLs temporárias nem termos de busca completos.
 Registre identificadores e contagens, passando-os em ``extra``.
+
+Os logs vão para a saída de erro; a saída padrão fica livre para o resultado dos comandos
+(o resumo JSON da CLI pode ser lido por outro programa).
 """
 
 import json
@@ -32,14 +35,14 @@ class FormatadorJson(logging.Formatter):
 
 
 def configurar_logging(nivel: str = "INFO") -> None:
-    manipulador = logging.StreamHandler(sys.stdout)
+    manipulador = logging.StreamHandler(sys.stderr)
     manipulador.setFormatter(FormatadorJson())
     raiz = logging.getLogger()
     raiz.handlers[:] = [manipulador]
     raiz.setLevel(nivel)
     # O log de acesso do uvicorn inclui a query string, que pode conter a busca do usuário.
     logging.getLogger("uvicorn.access").disabled = True
-    # O httpx registra cada requisição com a URL completa em INFO; a URL temporária do
-    # caderno do DJEN não pode chegar aos logs.
-    for nome in ("httpx", "httpcore"):
+    # O httpx (e o httpx2, usado pelo huggingface-hub) registra cada requisição com a URL
+    # completa em INFO; a URL temporária do caderno do DJEN não pode chegar aos logs.
+    for nome in ("httpx", "httpcore", "httpx2", "httpcore2"):
         logging.getLogger(nome).setLevel(logging.WARNING)

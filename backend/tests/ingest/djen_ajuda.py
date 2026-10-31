@@ -25,7 +25,7 @@ def config_djen(**alteracoes: Any) -> ConfigDjen:
 
 
 def ler_json(nome: str) -> Any:
-    return json.loads((PASTA / nome).read_text())
+    return json.loads((PASTA / nome).read_text(encoding="utf-8"))
 
 
 def url_metadados(data: date, tribunal: str = dados.TRIBUNAL) -> str:

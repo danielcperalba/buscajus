@@ -1,7 +1,8 @@
 """Reprocessamento a partir do bruto filtrado, sem rede (ARCHITECTURE.md, seção 3.2).
 
 Refaz normalização, PII residual e upsert de cada caderno processado, lendo o arquivo
-bruto da versão corrente. Serve para mudanças no parser. A camada 1 de anonimização não
+bruto da versão corrente. Serve para mudanças no parser. Itens bloqueados não voltam ao
+banco (F1-27) e saem do arquivo bruto (F2-13). A camada 1 de anonimização não
 pode ser refeita daqui, porque os destinatários nunca são gravados.
 """
 
@@ -13,6 +14,7 @@ from sqlalchemy import Engine, text
 from buscajus.ingest.bruto import ArmazenamentoBruto, caminho_caderno
 from buscajus.ingest.conector import Contadores
 from buscajus.ingest.processamento import ProcessadorAcordaos
+from buscajus.ingest.remocao import CAMPO_ID, atualizar_coleta_bruta
 
 
 @dataclass
@@ -50,9 +52,16 @@ def reprocessar_cadernos(
 
     resultados = []
     for linha in cadernos:
-        itens = list(bruto.ler(caminho_caderno(linha.tribunal, linha.data, linha.versao)))
+        caminho = caminho_caderno(linha.tribunal, linha.data, linha.versao)
+        itens = list(bruto.ler(caminho))
         with engine.begin() as conexao:
             contadores = processador.processar_itens(conexao, itens, linha.bruta_id)
+            if contadores.ids_bloqueados:
+                reescrito = bruto.reescrever_sem(
+                    caminho, CAMPO_ID["djen"], contadores.ids_bloqueados
+                )
+                if reescrito is not None:
+                    atualizar_coleta_bruta(conexao, reescrito)
             conexao.execute(
                 text("""
                     UPDATE caderno_djen SET falhas_parser = :falhas, quarentena = :quarentena,

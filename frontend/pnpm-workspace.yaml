@@ -1,3 +1,38 @@
 allowBuilds:
   sharp: false
   unrs-resolver: false
+# Só instala versões publicadas há pelo menos 14 dias (em minutos): defesa contra pacotes
+# comprometidos publicados há pouco.
+minimumReleaseAge: 20160
+# Versões já fixadas no lockfile antes da regra (escolhidas pelo dono do projeto).
+minimumReleaseAgeExclude:
+  - next@16.4.2
+  - eslint-config-next@16.4.2
+  - typescript-eslint@8.72.0
+  - browserslist@4.29.4
+  - "@next/env@16.4.2"
+  - "@next/eslint-plugin-next@16.4.2"
+  - "@next/swc-darwin-arm64@16.4.2"
+  - "@next/swc-darwin-x64@16.4.2"
+  - "@next/swc-linux-arm64-gnu@16.4.2"
+  - "@next/swc-linux-arm64-musl@16.4.2"
+  - "@next/swc-linux-x64-gnu@16.4.2"
+  - "@next/swc-linux-x64-musl@16.4.2"
+  - "@next/swc-win32-arm64-msvc@16.4.2"
+  - "@next/swc-win32-x64-msvc@16.4.2"
+  - "@typescript-eslint/eslint-plugin@8.72.0"
+  - "@typescript-eslint/parser@8.72.0"
+  - "@typescript-eslint/project-service@8.72.0"
+  - "@typescript-eslint/scope-manager@8.72.0"
+  - "@typescript-eslint/tsconfig-utils@8.72.0"
+  - "@typescript-eslint/type-utils@8.72.0"
+  - "@typescript-eslint/types@8.72.0"
+  - "@typescript-eslint/typescript-estree@8.72.0"
+  - "@typescript-eslint/utils@8.72.0"
+  - "@typescript-eslint/visitor-keys@8.72.0"
+  - baseline-browser-mapping@2.11.30
+  - caniuse-lite@1.0.30001817
+  - electron-to-chromium@1.5.462
+  - ignore@7.0.13
+  - napi-postinstall@0.3.5
+  - node-releases@2.0.59

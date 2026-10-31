@@ -8,7 +8,7 @@ texto inteiro.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
@@ -26,7 +26,7 @@ MINIMO_CARACTERES = 40
 Campo = Literal["processo", "relator", "data_julgamento", "ementa"]
 RotuloCabecalho = Campo | Literal["descartado"]
 
-# Lista branca de rótulos (normalizados: sem acento, minúsculos, sem ":").
+# Lista branca de rótulos (normalizados: sem acento, minúsculos, sem ":") do perfil TJPR.
 ROTULOS: dict[str, Campo] = {
     "processo": "processo",
     "relator": "relator",
@@ -36,6 +36,30 @@ ROTULOS: dict[str, Campo] = {
     "data de julgamento": "data_julgamento",
     "ementa": "ementa",
 }
+
+
+@dataclass(frozen=True)
+class PerfilParser:
+    """Variações do HTML do ``texto`` entre tribunais (F7-02).
+
+    O algoritmo (tabela de cabeçalho, ementa, fallback sem tabela) é o mesmo; o perfil diz
+    quais rótulos do cabeçalho valem (lista branca, normalizados) e o tamanho mínimo da
+    ementa. Tribunal sem perfil próprio usa o do TJPR.
+    """
+
+    nome: str
+    rotulos: Mapping[str, Campo]
+    minimo_caracteres: int = MINIMO_CARACTERES
+
+
+PERFIL_TJPR = PerfilParser("tjpr", ROTULOS)
+# Perfis por sigla do tribunal. Um tribunal novo entra aqui só se o HTML dele diferir.
+PERFIS: Mapping[str, PerfilParser] = {"TJPR": PERFIL_TJPR}
+
+
+def perfil_para(tribunal: str | None) -> PerfilParser:
+    return PERFIS.get((tribunal or "").strip().upper(), PERFIL_TJPR)
+
 
 _BLOCOS = frozenset(
     {
@@ -106,8 +130,8 @@ def texto_de(elemento: etree._Element) -> str:
     return normalizar_espacos(decodificar("".join(partes)))
 
 
-def _rotulo(texto: str) -> RotuloCabecalho:
-    return ROTULOS.get(chave(texto).rstrip(":").strip(), "descartado")
+def _rotulo(texto: str, perfil: PerfilParser) -> RotuloCabecalho:
+    return perfil.rotulos.get(chave(texto).rstrip(":").strip(), "descartado")
 
 
 def _data(valor: str) -> tuple[date | None, bool]:
@@ -137,7 +161,7 @@ def _celula_ementa(celula: etree._Element) -> str:
     return _ROTULO_EMENTA.sub("", texto, count=1)
 
 
-def analisar(texto_html: str) -> EmentaDjen:
+def analisar(texto_html: str, perfil: PerfilParser = PERFIL_TJPR) -> EmentaDjen:
     if not texto_html or not texto_html.strip():
         raise FalhaParser("texto vazio")
     try:
@@ -147,7 +171,7 @@ def analisar(texto_html: str) -> EmentaDjen:
 
     tabela = next(iter(raiz.iter("table")), None)
     if tabela is None:
-        return _sem_tabela(texto_de(raiz))
+        return _sem_tabela(texto_de(raiz), perfil)
 
     campos: dict[Campo, str] = {}
     partes_ementa: list[str] = []
@@ -159,7 +183,7 @@ def analisar(texto_html: str) -> EmentaDjen:
         m = _ROTULO_EM_LINHA.match(primeira)
         if not m:
             continue
-        campo = _rotulo(m.group(1))
+        campo = _rotulo(m.group(1), perfil)
         if campo == "descartado":
             continue
         if campo == "ementa":
@@ -182,10 +206,10 @@ def analisar(texto_html: str) -> EmentaDjen:
     if fora:
         partes_ementa.append(fora)
 
-    return _resultado(campos, "\n\n".join(p for p in partes_ementa if p), "tabela")
+    return _resultado(campos, "\n\n".join(p for p in partes_ementa if p), "tabela", perfil)
 
 
-def _sem_tabela(texto: str) -> EmentaDjen:
+def _sem_tabela(texto: str, perfil: PerfilParser) -> EmentaDjen:
     """Rótulos em linhas no início do texto; se não houver nenhum, o texto inteiro."""
     linhas = texto.split("\n")
     campos: dict[Campo, str] = {}
@@ -198,7 +222,7 @@ def _sem_tabela(texto: str) -> EmentaDjen:
         if not m:
             inicio_ementa = i
             break
-        campo = _rotulo(m.group(1))
+        campo = _rotulo(m.group(1), perfil)
         # Sem nenhum rótulo de cabeçalho antes, "EMENTA:" é o começo do próprio texto.
         if campo in ("descartado", "ementa") and not achou_rotulo:
             inicio_ementa = i
@@ -213,18 +237,21 @@ def _sem_tabela(texto: str) -> EmentaDjen:
             campos.setdefault(campo, " ".join(m.group(2).split()))
         inicio_ementa = i + 1
     if not achou_rotulo:
-        return _resultado({}, texto, "texto_inteiro")
-    return _resultado(campos, "\n".join(linhas[inicio_ementa:]), "rotulos_no_texto")
+        return _resultado({}, texto, "texto_inteiro", perfil)
+    return _resultado(campos, "\n".join(linhas[inicio_ementa:]), "rotulos_no_texto", perfil)
 
 
 def _resultado(
     campos: dict[Campo, str],
     ementa: str,
     origem: Literal["tabela", "rotulos_no_texto", "texto_inteiro"],
+    perfil: PerfilParser,
 ) -> EmentaDjen:
     ementa = normalizar_espacos(ementa)
-    if len(ementa) < MINIMO_CARACTERES:
-        raise FalhaParser(f"ementa com {len(ementa)} caracteres (mínimo {MINIMO_CARACTERES})")
+    if len(ementa) < perfil.minimo_caracteres:
+        raise FalhaParser(
+            f"ementa com {len(ementa)} caracteres (mínimo {perfil.minimo_caracteres})"
+        )
     data, invalida = _data(campos.get("data_julgamento", ""))
     processo, classe = _processo(campos.get("processo"))
     return EmentaDjen(

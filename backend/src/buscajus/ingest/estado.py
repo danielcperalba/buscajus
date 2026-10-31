@@ -51,6 +51,7 @@ def _contadores(lote: LoteBruto) -> dict[str, Any]:
         "recebidos": c.recebidos,
         "aceitos": c.aceitos,
         "descartados": c.descartados,
+        "segredo": c.segredo,
         "rejeitados": list(c.rejeitados_anonimizacao),
         "falhas_parser": c.falhas_parser,
         "quarentena": c.quarentena,
@@ -204,8 +205,9 @@ class RepositorioJanelas:
     ) -> EstadoUnidade:
         zerar = """,
             ultima_pagina = NULL, total_fonte = NULL, itens_recebidos = 0, itens_aceitos = 0,
-            itens_descartados = 0, rejeitados_anonimizacao = '{}', falhas_parser = 0,
-            quarentena = 0, cancelados = 0, bloqueados = 0, anomalias = 0, respostas_429 = 0
+            itens_descartados = 0, descartados_segredo = 0, rejeitados_anonimizacao = '{}',
+            falhas_parser = 0, quarentena = 0, cancelados = 0, bloqueados = 0, anomalias = 0,
+            respostas_429 = 0
         """
         linha = conexao.execute(
             text(f"""
@@ -232,6 +234,7 @@ class RepositorioJanelas:
                     itens_recebidos = itens_recebidos + :recebidos,
                     itens_aceitos = itens_aceitos + :aceitos,
                     itens_descartados = itens_descartados + :descartados,
+                    descartados_segredo = descartados_segredo + :segredo,
                     rejeitados_anonimizacao =
                         rejeitados_anonimizacao || CAST(:rejeitados AS text[]),
                     falhas_parser = falhas_parser + :falhas_parser,

@@ -1,8 +1,9 @@
 """Processo de fundo: coleta agendada e geração de embeddings.
 
 Ao iniciar, apaga cadernos órfãos da área temporária. Com ``agendador.ativo``, roda o
-agendador (coleta diária do DJEN e checagem de versões) a cada ``intervalo_segundos``; sem
-ele, fica ocioso até receber um sinal de parada.
+agendador (coleta diária do DJEN com checagem de versões e coleta diária do TJDFT com
+recoleta de 30 dias) a cada ``intervalo_segundos``; sem ele, fica ocioso até receber um sinal
+de parada.
 """
 
 import logging
@@ -15,7 +16,16 @@ from buscajus.core.erros import descrever_erro
 from buscajus.core.logging import configurar_logging
 from buscajus.db.engine import obter_engine
 from buscajus.ingest import temporario
-from buscajus.ingest.agendador import TAREFA_DJEN_DIARIO, Agendador, coleta_djen_diaria
+from buscajus.ingest.agendador import (
+    TAREFA_DJEN_DIARIO,
+    TAREFA_TJDFT_CONFERENCIA,
+    TAREFA_TJDFT_DIARIO,
+    Agendador,
+    Executor,
+    coleta_djen_diaria,
+    coleta_tjdft_diaria,
+    conferencia_tjdft_mensal,
+)
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +58,15 @@ def main() -> None:
         return
 
     engine = obter_engine()
-    agendador = Agendador(engine, config, {TAREFA_DJEN_DIARIO: coleta_djen_diaria(config, engine)})
-    log.info("worker iniciado (agendador ligado)", extra={"djen_tribunais": config.djen.tribunais})
+    executores: dict[str, Executor] = {TAREFA_DJEN_DIARIO: coleta_djen_diaria(config, engine)}
+    if config.tjdft.ativo:
+        executores[TAREFA_TJDFT_DIARIO] = coleta_tjdft_diaria(config, engine)
+        executores[TAREFA_TJDFT_CONFERENCIA] = conferencia_tjdft_mensal(config, engine)
+    agendador = Agendador(engine, config, executores)
+    log.info(
+        "worker iniciado (agendador ligado)",
+        extra={"djen_tribunais": config.djen.tribunais, "tjdft_ativo": config.tjdft.ativo},
+    )
     while not parar.is_set():
         try:
             agendador.ciclo()

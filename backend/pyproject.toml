@@ -8,9 +8,11 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28",
     "lxml>=5.3",
+    "numpy>=2.1",
     "psycopg[binary]>=3.2",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
+    "pyyaml>=6.0.2",
     "sqlalchemy>=2.0.36",
     "tzdata>=2026.5",
     "uvicorn[standard]>=0.32",
@@ -25,9 +27,28 @@ dev = [
     "lxml-stubs>=0.5.1",
     "mypy>=1.13",
     "pytest>=8.3",
+    "pytest-cov>=6",
     "respx>=0.21",
     "ruff>=0.8",
+    "types-pyyaml>=6.0.12",
 ]
+# Modelos de embedding (Fase 3). Fora do sync padrão e da imagem até o F3-12:
+# `uv sync --group embeddings`. O torch vem do índice CPU do PyTorch.
+embeddings = [
+    "sentence-transformers>=3.3",
+    "torch>=2.5",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -65,6 +86,12 @@ packages = ["buscajus"]
 module = ["alembic.*"]
 ignore_missing_imports = true
 
+# Grupo opcional "embeddings": o CI principal roda sem ele; o mypy trata os dois iguais.
+[[tool.mypy.overrides]]
+module = ["sentence_transformers.*", "torch.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
@@ -74,4 +101,21 @@ filterwarnings = [
 ]
 markers = [
     "banco: teste que exige PostgreSQL com pgvector (BUSCAJUS_TEST_DATABASE_URL)",
+    "modelo: teste com modelo de embedding real (grupo embeddings; baixa ~17 MB do Hugging Face)",
 ]
+
+# F6-01: cobertura dos conectores (`uv run pytest --cov`, como no CI), com piso de 90%.
+[tool.coverage.run]
+source = [
+    "buscajus.ingest.djen",
+    "buscajus.ingest.tjdft",
+    "buscajus.ingest.http",
+    "buscajus.ingest.runner",
+    "buscajus.ingest.bruto",
+    "buscajus.ingest.remocao",
+]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true

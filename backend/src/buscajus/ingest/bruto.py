@@ -13,7 +13,7 @@ Layout, relativo a ``diretorio_raw``:
 import gzip
 import hashlib
 import json
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -56,6 +56,35 @@ class ArmazenamentoBruto:
         if fora:
             raise ErroListaBranca(f"campos fora da lista branca: {', '.join(fora)}")
 
+        return self._escrever(caminho_relativo, itens)
+
+    def reescrever_sem(
+        self, caminho_relativo: str, campo_id: str, ids: Collection[str]
+    ) -> ArquivoBruto | None:
+        """Regrava o arquivo sem os itens cujo ``campo_id`` está em ``ids`` (F2-13).
+
+        Devolve o arquivo novo, ou ``None`` se o arquivo não existe ou não tinha nenhum deles.
+        """
+        if not self._resolver(caminho_relativo).exists():
+            return None
+        alvo = {str(i).lower() for i in ids}
+        itens = list(self.ler(caminho_relativo))
+        restantes = [i for i in itens if str(i.get(campo_id)).lower() not in alvo]
+        if len(restantes) == len(itens):
+            return None
+        return self._escrever(caminho_relativo, restantes)
+
+    def listar(self, diretorio_relativo: str) -> list[str]:
+        """Arquivos brutos de um diretório (relativo), registrados ou não em ``coleta_bruta``."""
+        diretorio = self._resolver(diretorio_relativo)
+        if not diretorio.is_dir():
+            return []
+        return sorted(
+            f"{diretorio_relativo.rstrip('/')}/{arquivo.name}"
+            for arquivo in diretorio.glob("*.jsonl.gz")
+        )
+
+    def _escrever(self, caminho_relativo: str, itens: Sequence[Mapping[str, Any]]) -> ArquivoBruto:
         destino = self._resolver(caminho_relativo)
         destino.parent.mkdir(parents=True, exist_ok=True)
         conteudo = _jsonl_gz(itens)

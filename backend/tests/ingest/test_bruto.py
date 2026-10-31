@@ -80,3 +80,25 @@ def test_regravar_substitui_sem_deixar_temporario(
 def test_recusa_caminho_fora_do_diretorio(bruto: ArmazenamentoBruto, caminho: str) -> None:
     with pytest.raises(ValueError, match="relativo"):
         bruto.gravar(caminho, [], LISTA_BRANCA)
+
+
+def test_reescrever_sem_tira_so_os_itens_pedidos(bruto: ArmazenamentoBruto, tmp_path: Path) -> None:
+    caminho = "tjdft/TJDFT/2026-10-14/p00000.jsonl.gz"
+    bruto.gravar(caminho, [{"id": "A"}, {"id": "b"}, {"id": "c"}], LISTA_BRANCA)
+    arquivo = bruto.reescrever_sem(caminho, "id", ["a", "C"])  # sem diferença de caixa
+    assert arquivo is not None and arquivo.itens == 1
+    assert list(bruto.ler(caminho)) == [{"id": "b"}]
+    assert hashlib.sha256((tmp_path / caminho).read_bytes()).hexdigest() == arquivo.sha256
+    assert bruto.reescrever_sem(caminho, "id", ["x"]) is None  # nada a tirar
+    assert bruto.reescrever_sem("tjdft/TJDFT/2026-10-14/p00001.jsonl.gz", "id", ["b"]) is None
+    assert not list((tmp_path / "tjdft/TJDFT/2026-10-14").glob(".*.tmp"))
+
+
+def test_listar_arquivos_de_um_diretorio(bruto: ArmazenamentoBruto) -> None:
+    for pagina in (1, 0):
+        bruto.gravar(f"tjdft/TJDFT/2026-10-14/p{pagina:05d}.jsonl.gz", [], LISTA_BRANCA)
+    assert bruto.listar("tjdft/TJDFT/2026-10-14") == [
+        "tjdft/TJDFT/2026-10-14/p00000.jsonl.gz",
+        "tjdft/TJDFT/2026-10-14/p00001.jsonl.gz",
+    ]
+    assert bruto.listar("tjdft/TJDFT/2026-10-15") == []

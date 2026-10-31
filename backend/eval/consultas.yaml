@@ -1,0 +1,232 @@
+# Conjunto de avaliação da busca (F3-01; ARCHITECTURE.md, seção 7.1).
+#
+# PROPOSTA INICIAL, PENDENTE DE REVISÃO JURÍDICA. As consultas foram escritas como um
+# usuário descreveria a situação, sem termos técnicos obrigatórios. Uma pessoa com formação
+# jurídica deve revisar o texto, a área e o resultado esperado, cortar ou acrescentar
+# consultas e, então, trocar "status" para "revisado", com a data e o responsável.
+#
+# Campos: id (estável), texto, area, obrigatoria (caso que precisa passar, ex.: F6-07) e
+# esperado (o que um bom resultado traz, para orientar o julgamento).
+versao: 1
+status: pendente de revisão jurídica
+revisao: {data: null, responsavel: null}
+
+consultas:
+  # Família e sucessões
+  - id: q001
+    texto: disputa por herança familiar
+    area: família e sucessões
+    obrigatoria: true
+    esperado: acórdãos de inventário, partilha e sucessão no top 10
+  - id: q002
+    texto: irmãos brigando pela divisão da casa dos pais depois que eles morreram
+    area: família e sucessões
+    esperado: partilha de imóvel em inventário, condomínio entre herdeiros, extinção de condomínio
+  - id: q003
+    texto: filho fora do casamento quer receber parte da herança do pai
+    area: família e sucessões
+    esperado: investigação de paternidade post mortem e petição de herança
+  - id: q004
+    texto: companheira em união estável tem direito à herança
+    area: família e sucessões
+    esperado: direito sucessório do companheiro, reconhecimento de união estável post mortem
+  - id: q005
+    texto: pai deixou de pagar pensão alimentícia do filho
+    area: família e sucessões
+    esperado: execução de alimentos, prisão civil do devedor
+  - id: q006
+    texto: redução do valor da pensão porque o pai perdeu o emprego
+    area: família e sucessões
+    esperado: revisional de alimentos, binômio necessidade e possibilidade
+  - id: q007
+    texto: guarda compartilhada quando os pais moram em cidades diferentes
+    area: família e sucessões
+    esperado: guarda compartilhada, regime de convivência, melhor interesse da criança
+  - id: q008
+    texto: divisão dos bens comprados durante o casamento no divórcio
+    area: família e sucessões
+    esperado: partilha de bens no divórcio, regime de comunhão parcial
+  - id: q009
+    texto: testamento feito por idoso doente pode ser anulado
+    area: família e sucessões
+    esperado: nulidade ou anulação de testamento, capacidade do testador
+  - id: q010
+    texto: avós pedindo para visitar os netos
+    area: família e sucessões
+    esperado: direito de convivência dos avós
+
+  # Consumidor e juizados especiais
+  - id: q011
+    texto: voo cancelado e a companhia aérea não deu hotel nem comida
+    area: consumidor
+    esperado: transporte aéreo, cancelamento, assistência material, dano moral
+  - id: q012
+    texto: banco descontou empréstimo que eu não contratei da minha aposentadoria
+    area: consumidor
+    esperado: empréstimo consignado fraudulento, repetição do indébito, dano moral
+  - id: q013
+    texto: nome negativado indevidamente por dívida já paga
+    area: consumidor
+    esperado: inscrição indevida em cadastro de inadimplentes, dano moral in re ipsa
+  - id: q014
+    texto: produto com defeito e a loja se recusa a trocar
+    area: consumidor
+    esperado: vício do produto, responsabilidade do fornecedor, prazo de 30 dias
+  - id: q015
+    texto: cobrança de serviço de telefonia que nunca foi pedido
+    area: consumidor
+    esperado: cobrança indevida, devolução em dobro
+  - id: q016
+    texto: compra pela internet que nunca foi entregue
+    area: consumidor
+    esperado: comércio eletrônico, inadimplemento, restituição do valor
+  - id: q017
+    texto: atraso na entrega do apartamento comprado na planta
+    area: consumidor
+    esperado: atraso de obra, lucros cessantes, cláusula de tolerância
+  - id: q018
+    texto: golpe do pix e responsabilidade do banco
+    area: consumidor
+    esperado: fraude bancária, fortuito interno, Súmula 479 do STJ
+  - id: q019
+    texto: corte de energia elétrica por conta antiga
+    area: consumidor
+    esperado: suspensão do fornecimento por débito pretérito
+  - id: q020
+    texto: juros abusivos em contrato de financiamento de carro
+    area: consumidor
+    esperado: revisão contratual, juros remuneratórios acima da média de mercado
+
+  # Saúde suplementar
+  - id: q021
+    texto: plano de saúde negou cirurgia urgente
+    area: saúde suplementar
+    esperado: negativa de cobertura, urgência, dano moral
+  - id: q022
+    texto: plano de saúde não quer pagar remédio para câncer
+    area: saúde suplementar
+    esperado: cobertura de medicamento antineoplásico, rol da ANS
+  - id: q023
+    texto: tratamento para criança autista negado pelo convênio
+    area: saúde suplementar
+    esperado: terapias para TEA, cobertura obrigatória, limite de sessões
+  - id: q024
+    texto: aumento da mensalidade do plano por mudança de faixa etária
+    area: saúde suplementar
+    esperado: reajuste por faixa etária, abusividade
+  - id: q025
+    texto: plano cancelado durante internação por falta de pagamento
+    area: saúde suplementar
+    esperado: rescisão unilateral, notificação prévia, continuidade do tratamento
+
+  # Responsabilidade civil, contratos e imóveis
+  - id: q026
+    texto: indenização por acidente de trânsito com moto
+    area: responsabilidade civil
+    esperado: acidente de trânsito, culpa, danos materiais e morais
+  - id: q027
+    texto: inquilino não paga aluguel e não sai do imóvel
+    area: locação
+    esperado: despejo por falta de pagamento
+  - id: q028
+    texto: condômino barulhento e multa do condomínio
+    area: condomínio
+    esperado: multa por comportamento antissocial, direito de vizinhança
+  - id: q029
+    texto: vizinho construiu muro no meu terreno
+    area: direitos reais
+    esperado: ação demolitória, reintegração de posse, esbulho
+  - id: q030
+    texto: usucapião de casa ocupada há muitos anos
+    area: direitos reais
+    esperado: usucapião extraordinária ou especial urbana, posse mansa e pacífica
+  - id: q031
+    texto: erro médico durante o parto
+    area: responsabilidade civil
+    esperado: responsabilidade do hospital e do médico, dano moral, pensão
+  - id: q032
+    texto: ofensas publicadas em rede social
+    area: responsabilidade civil
+    esperado: dano moral por publicação ofensiva, remoção de conteúdo
+  - id: q033
+    texto: devolução do dinheiro na desistência da compra de imóvel
+    area: contratos
+    esperado: distrato, retenção de valores pagos, Lei 13.786/2018
+
+  # Público, tributário e servidores
+  - id: q034
+    texto: cobrança de IPTU de imóvel que já foi vendido
+    area: tributário
+    esperado: legitimidade passiva, responsabilidade tributária do adquirente
+  - id: q035
+    texto: prescrição de dívida de IPVA
+    area: tributário
+    esperado: prescrição do crédito tributário, execução fiscal
+  - id: q036
+    texto: servidor público estadual quer receber gratificação atrasada
+    area: administrativo
+    esperado: pagamento de vantagem a servidor, prescrição quinquenal
+  - id: q037
+    texto: candidato aprovado em concurso dentro das vagas e não foi nomeado
+    area: administrativo
+    esperado: direito subjetivo à nomeação
+  - id: q038
+    texto: estado obrigado a fornecer remédio de alto custo
+    area: saúde pública
+    esperado: fornecimento de medicamento pelo poder público, Tema 106 do STJ
+  - id: q039
+    texto: falta de vaga em creche pública para criança pequena
+    area: infância e juventude
+    esperado: direito à educação infantil, obrigação do município
+  - id: q040
+    texto: auxílio-acidente por doença causada pelo trabalho
+    area: acidentária
+    esperado: benefício acidentário contra o INSS, nexo causal
+
+  # Penal
+  - id: q041
+    texto: agressão contra a mulher dentro de casa
+    area: penal
+    esperado: violência doméstica, Lei Maria da Penha, lesão corporal
+  - id: q042
+    texto: medida protetiva descumprida pelo ex-marido
+    area: penal
+    esperado: descumprimento de medida protetiva de urgência
+  - id: q043
+    texto: pequena quantidade de droga para consumo ou tráfico
+    area: penal
+    esperado: desclassificação para uso pessoal, tráfico privilegiado
+  - id: q044
+    texto: furto de objeto de pequeno valor
+    area: penal
+    esperado: princípio da insignificância, furto privilegiado
+  - id: q045
+    texto: prisão preventiva sem fundamentação
+    area: penal
+    esperado: habeas corpus, fundamentação idônea, medidas cautelares diversas
+  - id: q046
+    texto: motorista bêbado que causou acidente com morte
+    area: penal
+    esperado: homicídio culposo na direção, embriaguez, dolo eventual
+  - id: q047
+    texto: reconhecimento do réu só por fotografia na delegacia
+    area: penal
+    esperado: reconhecimento pessoal, art. 226 do CPP, nulidade
+  - id: q048
+    texto: progressão de regime e falta grave na prisão
+    area: execução penal
+    esperado: agravo em execução, falta grave, data-base
+
+  # Processo
+  - id: q049
+    texto: justiça gratuita negada para quem ganha pouco
+    area: processo civil
+    esperado: gratuidade da justiça, presunção de hipossuficiência
+  - id: q050
+    texto: penhora do salário para pagar dívida
+    area: processo civil
+    esperado: impenhorabilidade do salário, mitigação, mínimo existencial
+  - id: q051
+    texto: prazo perdido por erro no sistema do tribunal
+    area: processo civil
+    esperado: justa causa, indisponibilidade do sistema eletrônico, tempestividade

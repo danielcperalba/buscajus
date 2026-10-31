@@ -6,12 +6,15 @@ from alembic import command
 from alembic.config import Config as ConfigAlembic
 from sqlalchemy import Engine, text
 
+from buscajus.db.classes_cnj import ler_tpu
+
 pytestmark = pytest.mark.banco
 
 TABELAS_POR_REVISAO = {
     "0002": {"caderno_djen", "coleta_janela", "coleta_bruta", "tarefa"},
     "0003": {"acordao", "acordao_historico"},
     "0004": {"bloqueio", "pedido_remocao"},
+    "0006": {"classe_cnj"},
 }
 
 # Nenhuma coluna pode guardar partes, advogados ou destinatários (ARCHITECTURE.md, seção 6.6).
@@ -124,4 +127,42 @@ def test_0005_anomalias_e_classe_citacao(alembic: ConfigAlembic, engine: Engine)
     command.upgrade(alembic, "0005")
     assert novas <= colunas()
     command.downgrade(alembic, "0004")
+    assert not novas & colunas()
+
+
+def test_0006_carrega_a_tpu(alembic: ConfigAlembic, engine: Engine) -> None:
+    tpu = ler_tpu()
+    command.upgrade(alembic, "0006")
+    with engine.connect() as conexao:
+        total, referencias = conexao.execute(
+            text("SELECT count(*), array_agg(DISTINCT tpu_referencia) FROM classe_cnj")
+        ).one()
+        nome = conexao.scalar(text("SELECT nome FROM classe_cnj WHERE codigo = 198"))
+    assert total == len(tpu.classes) > 800
+    assert referencias == [tpu.data_referencia]
+    assert nome == "Apelação Cível"
+
+
+def test_0007_colunas_do_tjdft(alembic: ConfigAlembic, engine: Engine) -> None:
+    def colunas() -> set[str]:
+        with engine.connect() as conexao:
+            return {
+                f"{t}.{c}"
+                for t, c in conexao.execute(
+                    text(
+                        "SELECT table_name, column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public'"
+                    )
+                )
+            }
+
+    novas = {
+        "acordao.relator_designado",
+        "acordao.relator_designado_chave",
+        "acordao.local_publicacao",
+        "coleta_janela.descartados_segredo",
+    }
+    command.upgrade(alembic, "0007")
+    assert novas <= colunas()
+    command.downgrade(alembic, "0006")
     assert not novas & colunas()
