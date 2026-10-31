@@ -28,6 +28,8 @@
 >
 > **Revisão 13 (28/10/2026)**: produção (seção 12.2): compose próprio com o Caddy como único serviço exposto, redes internas, limites de memória, backups agendados; detalhe do acórdão responde 503 com timeout quando a API falha (seção 11.2).
 >
+> **Revisão 15 (30/10/2026)**: NER pré-treinado sem treino próprio, escolhido com dados sintéticos (`Luciano/bertimbau-base-lener_br`, MIT; seção 6.3 e [docs/avaliacao-ner.md](docs/avaliacao-ner.md)); mascaramento de documentos de identificação ancorado por palavra-chave (seção 6.3); validação por **revisão por amostra** das ementas já anonimizadas, com critério de aprovação, e **piloto local** pequeno e temporário (seção 6.7); disco criptografado passa a ser exigência só do servidor de produção (seção 12.2).
+>
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
 
 ## Sumário
@@ -128,7 +130,7 @@ Todo o backend é um único pacote Python (`buscajus`) com dois pontos de entrad
 | HTTP client | `httpx` | Timeouts, download em streaming, fácil de gravar e reproduzir respostas em testes (`respx`). |
 | Leitura do caderno | `zipfile` + parser JSON em streaming | Processa ~92 mil comunicações por dia sem carregar o diário inteiro em memória. |
 | Parsing HTML | `html.unescape` + `lxml`/`selectolax` | Decodificação completa de entidades e extração robusta da tabela de cabeçalho do DJEN. |
-| NER de pessoas | Modelo open-source local para português (candidatos na seção 6.3) | Segunda camada de anonimização, sem enviar texto a terceiros. Roda só nas ementas aceitas (~1.500/dia no TJPR). |
+| NER de pessoas | **`Luciano/bertimbau-base-lener_br`** (BERTimbau base ajustado no LeNER-Br, MIT), pré-treinado, sem treino próprio (seção 6.3) | Segunda camada de anonimização, local, sem enviar texto a terceiros. Roda só nas ementas aceitas (~1.500/dia no TJPR), ~130 ms por ementa em CPU. |
 | Frontend | **Next.js (App Router) + React + TypeScript** | SSR para páginas de detalhe (compartilháveis e indexáveis), boa DX e hospedagem simples em Node. |
 | Gerência de dependências | `uv` (Python), `pnpm` (frontend) | Rápidos e com lockfile. |
 | Qualidade | `ruff` (lint + format), `mypy`, `pytest`; `eslint` + `prettier` + `tsc` | CI barato e rápido. |
@@ -200,7 +202,7 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 4. Calcula o SHA-256 do arquivo e compara com `hash`. Se divergir: apaga, tenta de novo (até 3 vezes, com metadados novos) e, persistindo, marca `erro`.
 5. Lê as entradas do ZIP em streaming e confere a quantidade de comunicações com `total`. Para cada comunicação:
    - `tipoDocumento` normalizado ≠ `"Ementa de Acórdão"` → descartada imediatamente (não é gravada nem logada);
-   - caso contrário → **anonimização** do `texto` (camada 1: nomes dos destinatários → iniciais; camada 2: NER de pessoas), mascaramento de CPF, verificação de que nenhum nome de destinatário PF ou ambíguo sobrou e, só então, aplicação da lista branca, que descarta `destinatarios` e `destinatarioadvogados` (seção 6.3).
+   - caso contrário → **anonimização** do `texto` (camada 1: nomes dos destinatários → iniciais; camada 2: NER de pessoas), mascaramento de CPF e de documentos de identificação, verificação de que nenhum nome de destinatário PF ou ambíguo, CPF ou documento sobrou e, só então, aplicação da lista branca, que descarta `destinatarios` e `destinatarioadvogados` (seção 6.3).
 6. Grava o bruto filtrado e anonimizado (`data/raw/djen/{tribunal}/{data}/v{versao}.jsonl.gz`) e registra em `coleta_bruta`.
 7. **Apaga o ZIP** (bloco `finally`, inclusive em erro). O `worker` também limpa arquivos órfãos da área temporária ao iniciar.
 8. Normalização, limpeza, verificação de PII residual e upsert de cada acórdão.
@@ -527,7 +529,7 @@ Texto fora da tabela de cabeçalho (quando existir) também entra na ementa. Mó
 |---|---|
 | Recepção — DJEN | O ZIP do caderno contém nomes de partes e advogados de **todas** as comunicações do dia. Ele só existe na área temporária (`tmp-cadernos`, tmpfs, fora de volumes persistentes e de backups), é lido em streaming e é **apagado ao fim do processamento, inclusive em caso de erro**. Arquivos órfãos são apagados quando o `worker` inicia. Comunicações que não são ementa de acórdão são descartadas em memória, sem gravação nem log. Nas ementas aceitas, `destinatarios` e `destinatarioadvogados` ficam só em memória, pelo tempo da anonimização do texto, e depois são descartados pela lista branca; nunca são gravados nem logados. |
 | Recepção — TJDFT | Registros cujo `segredoJustica` não seja exatamente `false` e registros com `base` diferente de `acordaos` são descartados antes de qualquer gravação. |
-| Anonimização | Camadas 1 e 2 e invariante (seção 6.3), **antes de qualquer gravação**. A camada 2 (NER) também se aplica ao TJDFT. |
+| Anonimização | Camadas 1 e 2, mascaramento de CPF e de documentos de identificação e invariante (seção 6.3), **antes de qualquer gravação**. A camada 2 (NER) e os mascaramentos também se aplicam ao TJDFT (ementa e decisão). |
 | Armazenamento bruto | Contém só itens aceitos, já anonimizados e com a lista branca aplicada. |
 | Limpeza | Do cabeçalho do DJEN só se extraem `Processo`, `Relator(a)` e `Data do Julgamento` (lista branca). |
 | Verificação de PII residual | Varredura final da ementa normalizada (seção 6.4). |
@@ -553,7 +555,7 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 - O casamento é tolerante: comparação sem acentos e sem diferença de caixa, feita sobre os nós de texto do HTML (com as entidades já decodificadas) e re-serializada, para o `texto` continuar sendo HTML válido. Casa o nome completo e também subsequências de dois ou mais tokens (ex.: primeiro e último nome). Um token isolado não é substituído nessa camada, para evitar falsos positivos com sobrenomes comuns; esses casos ficam para a camada 2.
 - O nome do relator e os rótulos do cabeçalho não são alterados: as linhas de metadados do cabeçalho (processo, relator, órgão julgador, data) ficam fora das camadas de nomes, e o nome do relator fica protegido também no corpo (citações). Na substituição, o texto é decodificado (inclusive entidades escapadas duas vezes) e o HTML é re-serializado com os caracteres em Unicode.
 
-**TJDFT** (`ingest.tjdft.anonimizacao`): a API não traz partes, então não há camada 1. A ementa e a decisão passam pela camada 2 (mesma interface `DetectorPessoas` e mesmas exceções; os magistrados do próprio acórdão, `nomeRelator`, `nomeRelatorDesignado` e `nomeRevisor`, ficam protegidos) e pelo mascaramento de CPF; se sobrar CPF, o registro é recusado e só o uuid é contado. Sem NER configurado, a coleta do TJDFT não é criada.
+**TJDFT** (`ingest.tjdft.anonimizacao`): a API não traz partes, então não há camada 1. A ementa e a decisão passam pela camada 2 (mesma interface `DetectorPessoas` e mesmas exceções; os magistrados do próprio acórdão, `nomeRelator`, `nomeRelatorDesignado` e `nomeRevisor`, ficam protegidos) e pelo mascaramento de CPF e de documentos; se sobrar CPF ou documento, o registro é recusado e só o uuid é contado. Sem NER configurado (ou sem os pesos no volume), a coleta do TJDFT não é criada.
 
 **Mascaramento de CPF (DJEN e TJDFT)**
 
@@ -562,36 +564,46 @@ O DJEN **não tem marcação de segredo de justiça**. Além dos campos `destina
 - Grafias parciais (`000000000-00`, `000.000.00000`) são mascaradas se o dígito verificador for válido.
 - Uma sequência de 11 dígitos sem formatação só é mascarada se cumprir duas condições: (a) **não estar colada a outros dígitos**, isto é, sem dígito imediatamente antes ou depois; (b) ter dígitos verificadores válidos. A condição (a) evita casar pedaços de um número de processo sem máscara (20 dígitos) ou de um CNPJ (14 dígitos).
 
+**Documentos de identificação (DJEN e TJDFT; F1-41, `ingest.anonimizacao.documentos`)**
+
+- RG/identidade, CNH, título de eleitor, PIS/PASEP/NIS/NIT, CTPS (número e série) e passaporte. Ao contrário do CPF, esses números não têm formato que os distinga de processos, leis, artigos, valores e datas, então **só é mascarado o número que vem logo depois da palavra-chave**: siglas em maiúsculas e fora de palavras (`RG`, `R.G.`, `C.I.`, `CNH`, `PIS`, `PASEP`, `NIS`, `NIT`, `CTPS`; `AgRg` não é RG) e expressões por extenso em qualquer caixa (`identidade`, `carteira de identidade`, `carteira nacional de habilitação`, `título de eleitor`, `título eleitoral`, `inscrição eleitoral`, `carteira de trabalho`, `passaporte`). `Habilitação` e `título` sozinhos não contam (habilitação de crédito, título executivo).
+- Entre a palavra-chave e o número cabem só o órgão emissor (`RG/SSP-PR`) e um conector (`nº`, `n.`, `número`, `sob o nº`, `:`). A palavra-chave fica e o número vira `***`.
+- Defesas: número com menos de 5 dígitos, no formato CNJ de processo ou de CNPJ nunca é mascarado.
+- Aplica-se a todo o texto (inclusive linhas protegidas do cabeçalho), depois do CPF; a invariante recusa o item se sobrar algum documento. Documento residual depois disso leva à quarentena (seção 6.4).
+- E-mail, telefone e OAB não são mascarados: caem na quarentena (seção 6.4).
+
 **Camada 2: NER de pessoas (DJEN e TJDFT)**
 
-- Modelo local de reconhecimento de entidades em português. Candidatos: modelos treinados no LeNER-Br (corpus jurídico brasileiro) e o spaCy `pt_core_news_lg`. A escolha sai de uma avaliação com meta de recall (BACKLOG F1-36).
+- Modelo **pré-treinado, sem treino próprio**: `Luciano/bertimbau-base-lener_br` (BERTimbau base ajustado no LeNER-Br, corpus jurídico brasileiro; licença MIT), revisão `824f48e1b86fe24a86bd5f845f068c60468274a7`, fixados em `anonimizacao.modelo_ner` e `anonimizacao.revisao_ner`. Escolhido só com ementas sintéticas (F1-36): comparado ao spaCy `pt_core_news_lg` (CC BY-SA 4.0, deixou escapar 18 de 137 nomes), ao `Luciano/bertimbau-large-lener_br` (MIT, mesmo resultado, ~3,5× mais lento) e ao `pierreguillou/ner-bert-base-cased-pt-lenerbr` (sem licença declarada, descartado). Métricas em [docs/avaliacao-ner.md](docs/avaliacao-ner.md).
+- O detector (`ingest.anonimizacao.modelo_ner.DetectorTransformers`) não usa o rótulo mais provável: soma a **probabilidade de pessoa** (`B-PESSOA` + `I-PESSOA`) de cada palavra e anonimiza a partir de `anonimizacao.limiar_ner` = **0,1** (sem vazamentos de 0,05 a 0,7 no conjunto sintético; o limiar baixo dá margem para o texto real). Palavras de pessoa vizinhas, com partículas (`de`, `da`, `dos`…), apóstrofo ou hífen entre elas, viram uma entidade; `e` não une (são duas pessoas).
+- **Caixa alta**: o texto também é lido numa variante com as palavras em maiúsculas trocadas por iniciais maiúsculas (mesmo comprimento); vale a maior probabilidade das duas leituras (`anonimizacao.caixa_ner`). Sem isso, nomes em caixa alta escaparam no conjunto sintético.
+- Ementas longas são lidas em janelas de 512 tokens com sobreposição de 128.
+- **Pesos no volume de modelos** (`diretorio_modelos/ner`, como no F3-12): só `buscajus modelos baixar-ner` baixa (arquivos `safetensors`, sem pickle); o carregamento é sempre `local_files_only`. Sem os pesos, a coleta não é criada. As dependências (`transformers`, `torch` CPU) ficam no grupo `ner`, que entra na imagem do backend.
 - Entidades `PESSOA` detectadas são substituídas por iniciais. A camada pega nomes que não estão entre os destinatários, como vítimas e testemunhas em casos criminais.
 - Exceções, mantidas no texto: o relator do acórdão; nomes precedidos de títulos de magistrado em citações de precedentes (`Rel.`, `Min.`, `Des.`, `Juiz`); epônimos de leis e institutos de uma lista curada (`Lei Maria da Penha` etc.).
 - O limiar favorece o recall: na dúvida, substitui. Um nome trocado por engano por iniciais custa pouca legibilidade; um nome que escapa é um vazamento.
 - O custo é baixo, porque a camada roda só nas ~1.500 ementas aceitas por dia, não nas ~92 mil comunicações.
 - O modelo entra pela interface `DetectorPessoas` (`ingest.anonimizacao.camada2`), aplicada a cada nó de texto do HTML. **Sem modelo configurado, o pipeline não é criado** (`criar_anonimizador` falha antes de qualquer download): nada real é processado sem a camada 2.
 
-**Conjunto de avaliação do NER** (aprovado com condições)
+**Escolha e validação do NER** (Revisão 15; substitui o conjunto anotado à mão)
 
-- Usar só as ~300 ementas necessárias, já processadas pela camada 1, guardando **apenas o texto da ementa** e o rótulo do estrato. Não guardar número do processo, link nem destinatários.
-- Amostra estratificada com ênfase em câmaras criminais (vítimas, testemunhas, corréus), mais família e cível. Proporção aprovada: 50% criminal, 25% família, 25% cível.
-- Ambiente local restrito aos anotadores, em disco criptografado, fora do repositório e do CI. A pasta (`ner-avaliacao-privado/`) também consta no `.gitignore`.
-- O conjunto não pode ser enviado a serviços de anotação nem a APIs de IA de terceiros. Pré-anotação só com modelo local.
-- O conjunto é excluído em até 30 dias após a decisão do modelo, com a data fixada na abertura da tarefa. Depois dela, só ficam as métricas agregadas e a decisão do modelo, e a exclusão é registrada no BACKLOG (F1-40).
+- A escolha do modelo e do limiar usa **só ementas sintéticas** (`backend/tests/fixtures/ner`): nomes fictícios em contextos jurídicos variados (vítima, testemunha, corréu, "o menor J.", caixa alta, partículas, apelidos entre aspas, nomes colados a pontuação, nomes que são palavras comuns, estrangeiros, ementa com mais de 512 tokens) e nomes que devem ficar (relator, `Rel.`, `Min.`, `Des.`, epônimos). Script: `backend/scripts/ner_avaliacao.py`; o job `backend-ner` do CI cobra 0 vazamentos nesse conjunto.
+- Critério: **recall primeiro**. Anonimizar a mais (um lugar ou uma empresa virar iniciais) é aceitável; deixar passar um nome, não.
+- A validação com dados reais é a **revisão por amostra** das ementas já anonimizadas, feita pelo dono do projeto (seção 6.7). Não há conjunto anotado nem ambiente de anotação.
 
 **Invariante e falha segura**
 
-- Depois das camadas, o pipeline verifica que nenhum nome de destinatário classificado como PF ou ambíguo sobrou no texto (comparação normalizada, nome completo ou subsequência de 2+ tokens) e que não há CPF sem máscara.
+- Depois das camadas, o pipeline verifica que nenhum nome de destinatário classificado como PF ou ambíguo sobrou no texto (comparação normalizada, nome completo ou subsequência de 2+ tokens) e que não há CPF nem documento de identificação sem máscara.
 - A verificação cobre o texto inteiro, inclusive as linhas protegidas do cabeçalho (só o relator e os epônimos ficam de fora), cada nó de texto e o texto corrido, para pegar nomes partidos entre tags (`<b>JOÃO</b> SILVA`).
 - Se sobrou algum, o item **não é gravado**, nem no bruto. Fica registrado só o `id` da comunicação, em `rejeitados_anonimizacao` do caderno, para investigar, corrigir e reprocessar o caderno.
 - Só depois disso a lista branca descarta `destinatarios` e `destinatarioadvogados`.
-- Cada acórdão registra `anonimizacao_versao` e o número de substituições, nunca os nomes.
+- Cada acórdão registra `anonimizacao_versao` (versões das regras e do modelo, revisão e limiar, ex.: `c1-1+cpf-1+doc-1+ner-bertimbau-base-lener_br@824f48e-l0.1`) e o número de substituições, nunca os nomes. Os anonimizadores também somam, só em memória, as substituições por camada (camada 1, camada 2, CPF, documentos), para o relatório da carga piloto.
 
 ### 6.4 Verificação de PII residual
 
 Depois da anonimização, uma verificação heurística final procura resíduos na ementa normalizada:
 
-- e-mail, telefone, número de OAB (`OAB/UF 12.345`) e qualquer CPF residual (que já deveria ter sido mascarado);
+- e-mail, telefone, número de OAB (`OAB/UF 12.345`) e qualquer CPF ou documento de identificação residual (que já deveria ter sido mascarado);
 - rótulos de qualificação de parte: `Apelante:`, `Apelado:`, `Recorrente:`, `Recorrido:`, `Agravante:`, `Autor:`, `Réu:`, `Advogado(a):`, `Requerente:` etc.
 
 Se encontrar algo, o acórdão vai para `quarentena` (não indexado, não exibido) e entra numa fila de revisão manual. A decisão de mascarar e liberar fica registrada. A heurística é conservadora (prefere falso positivo).
@@ -610,9 +622,37 @@ Se encontrar algo, o acórdão vai para `quarentena` (não indexado, não exibid
 - Teste com caderno sintético cujas comunicações contêm nomes marcadores em `destinatarios`, `destinatarioadvogados` e no texto de comunicações que não são acórdãos: nenhum marcador pode aparecer no banco, nos arquivos brutos nem nos logs.
 - **Teste de anonimização**: no caderno sintético, as ementas citam os destinatários no texto (caixa alta, sem acento, nome parcial, com entidades HTML). **Nenhum destinatário classificado como PF ou ambíguo pode sobrar no texto gravado** (banco e bruto), em comparação normalizada, e nenhum CPF pode ficar sem máscara. Nomes de PJ, de entes públicos, do relator e de magistrados citados permanecem. O teste bloqueia o merge se falhar.
 - **Teste de classificação**: conjunto fixo de casos difíceis (MEI, `FULANO 12345678900`, razão social com nome de pessoa, órgãos públicos, espólio, massa falida, condomínio), cada um com a classe esperada.
-- Avaliação da camada 2 num conjunto anotado, com meta de recall de nomes de pessoas (BACKLOG F1-36).
+- Camada 2 com o modelo real sobre o conjunto sintético (job `backend-ner`): nenhum nome a anonimizar escapa e relator, magistrados citados e epônimos ficam (BACKLOG F1-36/F1-37).
+- Documentos de identificação: testes positivos e negativos por documento, incluindo números de processo, de lei e de artigo que não podem ser mascarados (F1-41).
+- Revisão por amostra e piloto: amostragem estratificada, quarentena imediata em "vazou", relatório só com agregados e limpeza sem sobras, com dados sintéticos (F1-42 a F1-44).
 - Teste de que a área temporária fica vazia após processamento com sucesso **e** após falha.
 - Teste de que registros com `segredoJustica: true`, e com valores inesperados (ausente, `null`, `1`, `"S"`), não geram linha alguma.
+
+### 6.7 Revisão por amostra, critério de aprovação e piloto local
+
+A camada 2 é validada com dados reais por **revisão humana por amostra** das ementas já anonimizadas, não por um conjunto anotado. Quem revisa é o dono do projeto, no próprio terminal. Agentes de IA não leem as ementas, as amostras nem as marcações: constroem as ferramentas e recebem só agregados.
+
+**Ferramenta** (`buscajus revisao`, módulo `buscajus.revisao`; F1-42)
+
+- `amostrar --n 100`: sorteia ementas **ativas** (já anonimizadas) do banco local, estratificadas: TJPR com ~50% câmaras criminais, ~25% família (11ª e 12ª Câmaras Cíveis) e ~25% cível; TJDFT com 20% da amostra (`--fracao-tjdft`), metade criminal e metade cível. Estrato sem itens suficientes cede a cota aos outros. Grava em `ner-avaliacao-privado/` (no `.gitignore` e bloqueada pelo pre-commit) só o texto da ementa, o estrato, o id interno do acórdão e a versão da anonimização. `--nova-rodada` arquiva a rodada anterior e não repete acórdãos já sorteados; `--desde` restringe aos coletados a partir de uma data (amostra mensal).
+- `revisar`: mostra uma ementa por vez e aceita "ok" ou "vazou"; em "vazou", pede o trecho que escapou (conferido contra a ementa). Cada resposta é gravada na hora, para parar e continuar depois.
+- **Quarentena imediata**: o acórdão marcado como "vazou" vai para `quarentena` no mesmo instante (não aparece na busca nem no detalhe), com motivo que guarda a `anonimizacao_versao` que vazou. O upsert não o libera numa recoleta com as mesmas regras; só quando ele chega com outra `anonimizacao_versao`, isto é, reprocessado com as regras corrigidas (e, se ainda tiver PII, a verificação da seção 6.4 o segura).
+- `resultado`: imprime revisadas, vazamentos, taxa e **limite superior unilateral de 95%** (Clopper-Pearson; com 0 em 100, 2,95%), por rodada e por estrato, e grava esse resumo em `docs/revisao-anonimizacao.md`, sem nenhum trecho de ementa.
+- `verificar`: aplica as regras atuais (camada 2, CPF, documentos) às ementas marcadas e conta quantos trechos ainda aparecem. Os trechos ficam só na pasta privada e só alimentam esse comando, com saída agregada.
+
+**Critério de aprovação**
+
+- **0 vazamentos em 100 ementas revisadas** → libera as cargas no servidor de produção (F1-29, F1-33, F2-11) e o agendamento.
+- **Qualquer vazamento** → corrigir as regras, reprocessar e revisar **uma nova amostra de 100**.
+- **Depois do lançamento**: amostra mensal de 30 ementas novas (`amostrar --n 30 --desde …`), com o mesmo fluxo (vazamento → correção, reprocessamento e nova amostra).
+- A amostra e as marcações são apagadas ao fim de cada piloto ou 30 dias depois de cada aprovação (F1-40); ficam só os agregados de `docs/revisao-anonimizacao.md`.
+
+**Piloto local** (`buscajus piloto`, módulo `buscajus.piloto`; F1-43 e F1-44)
+
+- Pequeno e temporário: 5 dias úteis recentes do TJPR (DJEN) e 5 do TJDFT, no banco local do compose de desenvolvimento, só para teste e revisão. Nada vai para a internet nem para backup (o compose de desenvolvimento não tem serviço de backup). **Não exige disco criptografado**; a exigência vale só para o servidor de produção (seção 12.2).
+- `piloto carregar` roda no terminal do dono: recusa se o repositório ou a pasta da revisão estiverem numa pasta sincronizada com nuvem (OneDrive, Dropbox, Google Drive, iCloud, Nextcloud…; nomes de pasta e variáveis `OneDrive*`) e chama `docker compose run worker buscajus piloto executar-carga`. Esse subcomando só roda no `worker` (Linux, `BUSCAJUS_EM_CONTEINER=1`, tmpfs para os cadernos), com banco local e fora de produção; procura do dia anterior para trás até achar 5 dias com caderno (DJEN) ou com acórdãos (TJDFT) e devolve só agregados: comunicações, ementas aceitas, substituições por camada, quarentena, rejeitados pela anonimização, falhas de parser e descartados por segredo. É **ponto de parada**: só roda com a aprovação do dono.
+- `piloto limpar` (com confirmação) apaga todos os dados reais do piloto: acórdãos (menos os sintéticos de desenvolvimento, de processos do ano 2099), histórico, pedidos e bloqueios ligados a eles, as tabelas de coleta (`caderno_djen`, `coleta_janela`, `coleta_bruta`, `tarefa`), com `VACUUM FULL` para tirar as linhas apagadas do disco, os arquivos do volume `raw` e a pasta `ner-avaliacao-privado/`. Ficam o esquema, a `classe_cnj` e os sintéticos.
+- Sequência: carga → revisão → resultado → limpeza (README).
 
 ---
 
@@ -867,7 +907,7 @@ Item de resultado:
 |---|---|---|
 | `db` | `pgvector/pgvector:pg16` | Volume `pgdata`; extensões criadas por migração |
 | `api` | Python 3.12 slim + torch CPU | Carrega o modelo de embedding (~1–2 GB de RAM para e5-base) |
-| `worker` | mesma imagem da `api` | Agendador interno (caderno diário, checagem de versões, TJDFT) + job de embeddings; carrega também o modelo de NER |
+| `worker` | mesma imagem da `api` | Agendador interno (caderno diário, checagem de versões, TJDFT) + job de embeddings; carrega também o modelo de NER (pesos no volume de modelos, por `buscajus modelos baixar-ner`). Único lugar onde o piloto com dados reais roda (seção 6.7) |
 | `web` | Node 20 | Next.js |
 
 **Agendador do `worker`** (`ingest.agendador`): a cada ciclo, agenda em `tarefa` as coletas diárias que o worker sabe executar e executa as tarefas vencidas com `FOR UPDATE SKIP LOCKED`. DJEN: uma por tribunal, a partir de `horario_djen` (padrão 9h, America/Sao_Paulo); revisita os últimos dias (cadernos publicados com atraso; os concluídos são pulados) e roda a checagem de versões dos últimos 30 dias. TJDFT (com `tjdft.ativo`): uma por dia, a partir de `horario_tjdft` (8h); recoleta do dia mais recente até `dias_recoleta_tjdft` (30) dias atrás, o que cobre a reconsulta do dia anterior, as mudanças de segredo e os registros publicados com atraso. Fica **desligado por padrão** (`agendador.ativo = false`) e, mesmo ligado, não coleta nada sem o modelo de NER configurado.
@@ -885,6 +925,7 @@ Um único servidor próprio ou VPS de baixo custo no Brasil (4 vCPU, 16 GB de RA
 - **Limites de memória**: `db` 2 GB, `api` 2,5 GB, `worker` 3,5 GB (o tmpfs de 1.100 MB conta no limite do contêiner), `web` 512 MB, `backup` e `migracoes` 512 MB, `caddy` 256 MB. Os serviços permanentes somam 8,75 GB (mais o `backup`), daí o mínimo de 16 GB de RAM. Todos com `restart: unless-stopped` e rotação de logs; healthchecks em todos os serviços HTTP, no `db` e no `backup`.
 - **Uvicorn sem `--proxy-headers`**: o IP do cliente vem só de `ip_do_cliente` (`proxies_confiaveis`); o uvicorn não reescreve a conexão a partir do `X-Forwarded-For`.
 - **Dívida conhecida: CSP com `'unsafe-inline'` em `script-src`.** O Next.js injeta scripts inline na hidratação (dados do RSC) e, sem nonce, a CSP precisa liberá-los. O risco é aceito no MVP porque o site não exibe HTML vindo de usuário: o conteúdo é texto das fontes oficiais renderizado pelo React (escapado), e a única inserção de HTML é o trecho da busca, em que a API escapa o texto e só acrescenta `<mark>`, e o frontend ainda troca qualquer `<` que não seja de `<mark>`/`</mark>` (seções 8.8 e 11.1). Caminho para remover: gerar um nonce por requisição no `src/proxy.ts` (estendido a todas as rotas), mandar a CSP com `'nonce-…'` e `'strict-dynamic'` pelo próprio Next (que aplica o nonce aos seus scripts quando o lê do cabeçalho) e tirar a CSP do Caddyfile. O custo é que toda página passa a ser renderizada por requisição: perde-se o prerender parcial (`cacheComponents`) das páginas estáticas, o que pede medir a latência antes.
+- **Disco criptografado**: o servidor de produção guarda dados reais no banco, no volume `raw` e nos backups, então o disco (ou os volumes de dados e de backup) precisa de criptografia em repouso (LUKS ou a do provedor). É a única exigência de criptografia de disco do projeto: o piloto local (seção 6.7) é pequeno, temporário e apagado ao fim, e não a exige.
 - **Backups**: serviço `backup` (`ops/backup-servico.sh`) com `pg_dump` diário às `BACKUP_HORA_UTC`, retenção `BACKUP_RETENCAO_DIAS` e healthcheck que acusa backup com mais de 26 horas; cópia para fora do servidor por cron do usuário de operação (rsync ou rclone com cifragem); restauração em docs/backup.md.
 
 **Requisito de implantação (limite de taxa por IP)**:
@@ -939,9 +980,9 @@ Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; ve
 
 ## 14. Questões em aberto
 
-1. **[NER]** Modelo, limiar e meta de recall (BACKLOG F1-36).
+1. **[NER]** Validação com dados reais: depende da revisão por amostra do piloto local (seção 6.7, F1-43). Modelo e limiar já fixados (Revisão 15).
 2. **[Embeddings]** Modelo final (seção 7.1).
-3. **[TJDFT] Segredo de justiça**: os 128.815 acórdãos (7,3%) sob segredo estão excluídos no MVP, embora a API devolva a ementa completa. Reavaliar a inclusão, com anonimização, depois que o NER estiver validado.
+3. **[TJDFT] Segredo de justiça**: os 128.815 acórdãos (7,3%) sob segredo estão excluídos no MVP, embora a API devolva a ementa completa. Reavaliar a inclusão, com anonimização, depois que o NER estiver validado pela revisão por amostra.
 
 **Riscos aceitos**
 
@@ -953,3 +994,4 @@ Estimativa de armazenamento (~250–350 mil ementas): tabela + GIN ~2–3 GB; ve
 - Revisão 2: metadados do caderno obtidos sem download (~750 bytes; rechecagem de 30 dias mantida); cadernos disponíveis desde pelo menos 2022 (o ZIP não é guardado); DJEN sem marcação de segredo, tratado pela anonimização obrigatória do texto (seção 6.3).
 - Revisão 3: PJ e entes públicos mantidos no texto; estrutura de `destinatarios` na consulta pública (só nome e polo, sem `cpf_cnpj`), com classificação PF × PJ heurística; condições do conjunto de avaliação do NER.
 - Revisão 4: data inicial das ementas do TJPR no DJEN (23/07/2025); API do TJDFT (curinga, `termosAcessorios`, `tamanho` 40, paginação profunda, URL `acordaos/{uuid}`, `dataPublicacao` em UTC); `ESPÓLIO DE` como PF; regra de CPF não colado a outros dígitos; amostra e prazo de exclusão do NER.
+- Revisão 15: modelo de NER (`Luciano/bertimbau-base-lener_br`, MIT), limiar 0,1 e variante de caixa, escolhidos com dados sintéticos; o conjunto anotado à mão foi substituído pela revisão por amostra (seção 6.7).
