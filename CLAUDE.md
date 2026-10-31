@@ -24,6 +24,15 @@ trazem nomes de partes, advogados, vítimas e testemunhas.
 - Atualize o status no BACKLOG.md e o ARCHITECTURE.md quando uma decisão mudar.
 - Não execute tarefas marcadas como ponto de parada no BACKLOG sem aprovação explícita.
 
+## Credenciais
+
+- Operações no GitHub (push, abrir PR, acompanhar o CI) só pelo `gh`, autenticado pelo dono do
+  repositório; o `git` já usa o `gh` como credencial.
+- Nunca extraia, imprima ou use tokens de gerenciadores de credenciais (`git credential fill`,
+  Git Credential Manager, keyring) nem os passe para chamadas diretas à API.
+- Se o `gh` estiver deslogado ou falhar por autenticação, pare e peça ao dono do repositório.
+- Nunca peça nem aceite tokens ou senhas pelo chat; o login é sempre feito pelo dono, no terminal dele.
+
 ## Ambiente
 
 - APIs do DJEN bloqueiam acesso de fora do Brasil; não contorne (sem proxy ou VPN).
