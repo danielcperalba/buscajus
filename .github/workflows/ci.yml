@@ -57,6 +57,30 @@ jobs:
       - run: uv sync --frozen --group embeddings
       - run: uv run pytest -m modelo
 
+  # Camada 2 da anonimização com o modelo de NER fixado (F1-36/F1-37), sobre as ementas
+  # sintéticas: nenhum nome pode escapar. Os pesos (~440 MB) vão para um cache, como no volume
+  # de modelos, e só são baixados por `buscajus modelos baixar-ner`.
+  backend-ner:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      BUSCAJUS_DIRETORIO_MODELOS: ${{ github.workspace }}/modelos
+      BUSCAJUS_TEST_DIRETORIO_MODELOS: ${{ github.workspace }}/modelos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.4"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/modelos
+          key: ner-bertimbau-base-lener_br-824f48e
+      - run: uv sync --frozen --group ner
+      - run: uv run buscajus modelos baixar-ner
+      - run: uv run pytest -m ner
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

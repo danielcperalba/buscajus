@@ -169,9 +169,17 @@ class ConfigEmbeddings(BaseModel):
 
 
 class ConfigAnonimizacao(BaseModel):
-    # Modelo local de NER de pessoas (camada 2), escolhido no F1-36. Vazio: o pipeline do
-    # DJEN não é criado e nenhum dado real é processado.
-    modelo_ner: str | None = None
+    # Modelo local de NER de pessoas (camada 2), escolhido no F1-36 (docs/avaliacao-ner.md):
+    # nome e revisão (commit) no Hugging Face. Os pesos ficam em diretorio_modelos/ner e só são
+    # baixados por `buscajus modelos baixar-ner`. Vazio, ou sem os pesos no volume: o pipeline
+    # não é criado e nenhum dado real é processado (falha fechada).
+    modelo_ner: str | None = "Luciano/bertimbau-base-lener_br"
+    revisao_ner: str | None = "824f48e1b86fe24a86bd5f845f068c60468274a7"
+    # Probabilidade de pessoa a partir da qual a palavra é anonimizada. Baixo de propósito:
+    # anonimizar a mais é aceitável; deixar passar um nome, não.
+    limiar_ner: float = Field(default=0.1, gt=0, lt=1)
+    # Lê também uma variante do texto sem caixa alta (nomes em maiúsculas).
+    caixa_ner: bool = True
 
 
 class ConfigAgendador(BaseModel):

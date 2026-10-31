@@ -42,7 +42,9 @@ def criar_coleta(
     """``anonimizador`` só é passado nos testes; em produção vem da configuração."""
     if not config.tjdft.ativo:
         raise ConectorDesativado("o conector do TJDFT está desativado (tjdft.ativo = false)")
-    anonimizar = anonimizador or criar_anonimizador(carregar_detector(config.anonimizacao))
+    anonimizar = anonimizador or criar_anonimizador(
+        carregar_detector(config.anonimizacao, config.diretorio_modelos)
+    )
     with engine.connect() as conexao:
         classes = nomes_por_codigo(conexao)
     cliente = ClienteHttp(config.http, config.tjdft.requisicoes_por_segundo)

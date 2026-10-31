@@ -5,9 +5,10 @@ Ordem obrigatória, antes de qualquer gravação, inclusive a do bruto:
 1. classificação PF × PJ dos destinatários e advogados (só em memória);
 2. camada 1: nomes PF e ambíguos da própria comunicação → iniciais;
 3. camada 2: NER de pessoas → iniciais (com as exceções da camada 2);
-4. mascaramento de CPF;
-5. invariante: nenhum nome PF/ambíguo nem CPF sem máscara sobrou; se sobrou, o item é
-   recusado (:class:`Rejeicao`) e não é gravado;
+4. mascaramento de CPF e de documentos de identificação (RG, CNH, título de eleitor,
+   PIS/PASEP/NIS, CTPS, passaporte);
+5. invariante: nenhum nome PF/ambíguo, CPF ou documento sem máscara sobrou; se sobrou, o item
+   é recusado (:class:`Rejeicao`) e não é gravado;
 6. lista branca: ``destinatarios`` e ``destinatarioadvogados`` são descartados.
 
 O texto é HTML: as substituições são feitas nos nós de texto (com as entidades decodificadas)
@@ -19,6 +20,7 @@ download, para que nada real seja gravado sem a camada 2.
 """
 
 import re
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
@@ -30,12 +32,15 @@ from buscajus.ingest.anonimizacao import Rejeicao
 from buscajus.ingest.anonimizacao import camada2 as c2
 from buscajus.ingest.anonimizacao.classificacao import classificar
 from buscajus.ingest.anonimizacao.cpf import mascarar_cpf, tem_cpf
+from buscajus.ingest.anonimizacao.documentos import mascarar_documentos, tem_documento
 from buscajus.ingest.anonimizacao.nomes import Casador, sobrepoe, substituir, trechos_protegidos
 from buscajus.ingest.djen.campos import LISTA_BRANCA
 from buscajus.ingest.relator import normalizar_relator
 from buscajus.ingest.texto import chave, decodificar
 
-VERSAO = "c1-1+cpf-1"
+VERSAO = "c1-1+cpf-1+doc-1"
+# Contadores agregados por camada (relatório da carga piloto, F1-43); nunca o conteúdo.
+CAMADAS = ("camada1", "camada2", "cpf", "documentos")
 LIMITE_SUBSTITUICOES = 32767  # coluna smallint
 
 # Rótulos de metadados do cabeçalho: a linha inteira fica intacta para as camadas de nomes.
@@ -145,6 +150,7 @@ class AnonimizadorDjen:
     def __init__(self, detector: c2.DetectorPessoas) -> None:
         self._detector = detector
         self.versao = f"{VERSAO}+ner-{detector.versao}"
+        self.substituicoes: Counter[str] = Counter(dict.fromkeys(CAMADAS, 0))
 
     def __call__(self, item: Mapping[str, Any]) -> dict[str, Any] | Rejeicao:
         id_comunicacao = str(item.get("id"))
@@ -161,7 +167,9 @@ class AnonimizadorDjen:
         except (etree.ParserError, ValueError):
             return Rejeicao(id_comunicacao, "HTML não pôde ser lido")
         if novo_texto is None:
-            return Rejeicao(id_comunicacao, "nome de destinatário ou CPF restante no texto")
+            return Rejeicao(
+                id_comunicacao, "nome de destinatário, CPF ou documento restante no texto"
+            )
         return self._lista_branca(item, novo_texto, substituicoes)
 
     def _lista_branca(
@@ -180,17 +188,23 @@ class AnonimizadorDjen:
         protegidas, relator = _linhas_protegidas(raiz)
         protegidos = [relator] if relator else []
         casador = Casador(nomes)
-        total = 0
+        contagem: Counter[str] = Counter()
         for el, atributo, protegido in _nos_de_texto(raiz, protegidas):
             valor = decodificar(getattr(el, atributo))
+            etapas: list[tuple[str, Callable[[str], tuple[str, int]]]] = []
             if not protegido:
-                valor, n1 = substituir(valor, casador, protegidos)
-                valor, n2 = c2.aplicar(valor, self._detector, protegidos)
-                total += n1 + n2
-            valor, n3 = mascarar_cpf(valor)
-            total += n3
+                etapas += [
+                    ("camada1", lambda v: substituir(v, casador, protegidos)),
+                    ("camada2", lambda v: c2.aplicar(v, self._detector, protegidos)),
+                ]
+            etapas += [("cpf", mascarar_cpf), ("documentos", mascarar_documentos)]
+            for camada, etapa in etapas:
+                valor, n = etapa(valor)
+                contagem[camada] += n
             setattr(el, atributo, valor)
 
+        self.substituicoes.update(contagem)
+        total = sum(contagem.values())
         if not _invariante(raiz, protegidas, casador, protegidos):
             return None, total
         return _serializar(raiz), total
@@ -202,7 +216,7 @@ def _invariante(
     casador: Casador,
     protegidos: list[str],
 ) -> bool:
-    """Nenhum nome PF/ambíguo e nenhum CPF em lugar nenhum do texto.
+    """Nenhum nome PF/ambíguo, CPF ou documento em lugar nenhum do texto.
 
     Vale também para as linhas protegidas do cabeçalho: um nome de parte ali faz o item ser
     recusado. Só o relator e os epônimos ficam de fora.
@@ -210,7 +224,7 @@ def _invariante(
     valores = [
         decodificar(getattr(el, atributo)) for el, atributo, _ in _nos_de_texto(raiz, protegidas)
     ]
-    if any(tem_cpf(valor) for valor in valores):
+    if any(tem_cpf(valor) or tem_documento(valor) for valor in valores):
         return False
     # Cada nó e o texto corrido (nomes partidos entre nós, ex.: "<b>JOÃO</b> SILVA").
     for valor in [*valores, " ".join(valores)]:

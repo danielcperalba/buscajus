@@ -38,6 +38,7 @@ As redes `borda` e `interna` são `internal`: nada nelas sai para a internet, e 
   - **cache do Postgres** menor: buscas mais lentas à medida que a base cresce (medir no F6-08).
 
   Serve para lançar só com o full-text; para a busca semântica, migre para 16 GB.
+- **Disco criptografado**: o banco, o volume `raw` e os backups guardam dados reais (ementas anonimizadas, metadados dos processos, e-mails dos pedidos de remoção). Use criptografia em repouso no disco ou nos volumes de dados e de backup: LUKS na instalação ou a criptografia de disco do provedor (ARCHITECTURE.md, seção 12.2). O piloto local da revisão por amostra não exige isso; o servidor de produção, sim.
 - **Disco**: SSD, **80 GB** recomendados. Estimativa para 90 dias de TJPR + TJDFT (~95 mil ementas do TJPR, a ~1.500 por dia útil, e ~21 mil acórdãos do TJDFT, a ~7 mil a cada 30 dias):
 
   | Item | Estimativa |
@@ -118,7 +119,13 @@ Faça um backup antes de atualizar para uma versão com migração nova (seção
 
 ## Coleta manual e agendador
 
-A coleta exige o modelo de NER (camada 2 da anonimização). Sem `BUSCAJUS_ANONIMIZACAO__MODELO_NER`, `ingest djen` e `ingest tjdft` saem com código 2 antes de acessar a fonte, e o agendador não coleta nada. Hoje o carregamento do modelo ainda não existe (F1-37, que depende da validação do F1-36).
+A coleta exige o modelo de NER (camada 2 da anonimização), fixado na configuração (`anonimizacao.modelo_ner` e `anonimizacao.revisao_ner`, F1-36). Os pesos vão para o volume `modelos` uma vez, por um passo explícito; nada é baixado em tempo de execução:
+
+```bash
+docker compose run --rm worker buscajus modelos baixar-ner
+```
+
+Sem os pesos no volume, `ingest djen` e `ingest tjdft` saem com código 2 antes de acessar a fonte, e o agendador não coleta nada. As cargas no servidor só rodam depois da aprovação da revisão por amostra (0 vazamentos em 100 ementas; ARCHITECTURE.md, seção 6.7).
 
 Comandos pontuais rodam no contêiner do `worker` (mesmos volumes, tmpfs e rede de saída):
 
@@ -127,10 +134,10 @@ docker compose run --rm worker buscajus ingest status
 docker compose run --rm worker buscajus ingest tjdft --de 2026-10-01 --ate 2026-10-15
 ```
 
-**Ligar o agendador**, só depois que o NER estiver validado (F1-36 aprovado e F1-37 implementado e testado) e com as cargas iniciais conferidas:
+**Ligar o agendador**, só depois que a revisão por amostra aprovar a anonimização e com as cargas iniciais conferidas:
 
-1. Implante a versão com o F1-37 e coloque o modelo onde a configuração dele indicar (volume `modelos`, montado em `/dados/modelos`).
-2. No `.env`: `BUSCAJUS_ANONIMIZACAO__MODELO_NER=<modelo>`; rode uma coleta manual de um dia e confira `ingest status` (rejeitados, quarentena) antes de seguir.
+1. Baixe os pesos do NER para o volume `modelos` (comando acima).
+2. Rode uma coleta manual de um dia e confira `ingest status` (rejeitados, quarentena) antes de seguir.
 3. No `.env`: `BUSCAJUS_AGENDADOR__ATIVO=true` (horários e janelas: `BUSCAJUS_AGENDADOR__*`, no `.env.example`).
 4. `docker compose up -d worker` e acompanhe `docker compose logs -f worker` no primeiro ciclo.
 

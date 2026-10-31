@@ -57,7 +57,9 @@ def criar_coleta(
 
     Com ``tribunal``, a taxa de requisições é a do ajuste do tribunal, se houver (F7-01).
     """
-    anonimizar = anonimizador or criar_anonimizador(carregar_detector(config.anonimizacao))
+    anonimizar = anonimizador or criar_anonimizador(
+        carregar_detector(config.anonimizacao, config.diretorio_modelos)
+    )
     cliente = ClienteHttp(config.http, config.djen.taxa(tribunal))
     conector = ConectorDjen(config.djen, cliente, anonimizar, config.diretorio_tmp_cadernos)
     bruto = ArmazenamentoBruto(config.diretorio_raw)

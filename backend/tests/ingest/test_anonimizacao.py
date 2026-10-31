@@ -185,7 +185,7 @@ def test_caminho_feliz_em_toda_a_fixture(
     assert not isinstance(resultado, Rejeicao), ementa.id
     assert set(resultado) <= LISTA_BRANCA
     assert "destinatarios" not in resultado and "destinatarioadvogados" not in resultado
-    assert resultado["anonimizacao_versao"] == "c1-1+cpf-1+ner-falso-1"
+    assert resultado["anonimizacao_versao"] == "c1-1+cpf-1+doc-1+ner-falso-1"
 
     texto = normalizado(analisar(resultado["texto"]).ementa)
     for nome in dados.NOMES_CAMADA_1 + dados.NOMES_CAMADA_2:
@@ -234,7 +234,9 @@ def test_falha_segura_quando_o_nome_fica_partido_no_html(anonimizador: Anonimiza
         "ANACLETO BORGONOVI QUINTELA", "<b>ANACLETO</b> <i>QUINTELA</i>"
     )
     resultado = anonimizador(item)
-    assert resultado == Rejeicao("900001", "nome de destinatário ou CPF restante no texto")
+    assert resultado == Rejeicao(
+        "900001", "nome de destinatário, CPF ou documento restante no texto"
+    )
 
 
 def test_falha_segura_com_nome_em_linha_protegida(anonimizador: AnonimizadorDjen) -> None:

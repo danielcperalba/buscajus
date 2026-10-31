@@ -104,7 +104,7 @@ def test_nomes_e_cpfs_nao_chegam_ao_banco_nem_ao_bruto(
         assert preservado in criminal.ementa + criminal.decisao
     for numero in dados.NAO_CPFS:
         assert numero in criminal.ementa
-    assert criminal.anonimizacao_versao == "cpf-1+ner-falso-1"
+    assert criminal.anonimizacao_versao == "cpf-1+doc-1+ner-falso-1"
     assert criminal.anonimizacao_substituicoes == 4
 
 

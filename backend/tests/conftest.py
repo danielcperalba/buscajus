@@ -16,7 +16,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
 def _config_limpa(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Isola cada teste das variáveis BUSCAJUS_* e do .env da máquina."""
     for variavel in list(os.environ):
-        if variavel.startswith("BUSCAJUS_") and variavel != "BUSCAJUS_TEST_DATABASE_URL":
+        if variavel.startswith("BUSCAJUS_") and not variavel.startswith("BUSCAJUS_TEST_"):
             monkeypatch.delenv(variavel)
     monkeypatch.chdir(Path(__file__).parent)
     obter_config.cache_clear()

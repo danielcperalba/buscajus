@@ -38,6 +38,10 @@ embeddings = [
     "sentence-transformers>=3.3",
     "torch>=2.5",
 ]
+ner = [
+    "torch>=2.5",
+    "transformers>=4.44",
+]
 
 [tool.uv]
 default-groups = ["dev"]
@@ -86,9 +90,9 @@ packages = ["buscajus"]
 module = ["alembic.*"]
 ignore_missing_imports = true
 
-# Grupo opcional "embeddings": o CI principal roda sem ele; o mypy trata os dois iguais.
+# Grupos opcionais "embeddings" e "ner": o CI principal roda sem eles; o mypy trata os dois iguais.
 [[tool.mypy.overrides]]
-module = ["sentence_transformers.*", "torch.*"]
+module = ["sentence_transformers.*", "torch.*", "transformers.*", "huggingface_hub.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
@@ -102,6 +106,7 @@ filterwarnings = [
 markers = [
     "banco: teste que exige PostgreSQL com pgvector (BUSCAJUS_TEST_DATABASE_URL)",
     "modelo: teste com modelo de embedding real (grupo embeddings; baixa ~17 MB do Hugging Face)",
+    "ner: teste com o modelo de NER real (grupo ner; pesos em BUSCAJUS_TEST_DIRETORIO_MODELOS)",
 ]
 
 # F6-01: cobertura dos conectores (`uv run pytest --cov`, como no CI), com piso de 90%.

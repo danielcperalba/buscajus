@@ -11,13 +11,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Dependências primeiro, para aproveitar o cache de camadas.
+# Dependências primeiro, para aproveitar o cache de camadas. O grupo "ner" (transformers e
+# torch CPU) é a camada 2 da anonimização (F1-37); os pesos ficam no volume de modelos e só
+# entram por `buscajus modelos baixar-ner`.
 COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --group ner --no-install-project
 
 COPY alembic.ini ./
 COPY src ./src
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --group ner
 
 RUN useradd --system --uid 10001 --no-create-home buscajus \
     && mkdir -p /dados/raw /dados/modelos \

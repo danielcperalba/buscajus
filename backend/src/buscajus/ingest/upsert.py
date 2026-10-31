@@ -12,6 +12,8 @@ Para cada acórdão normalizado:
    anômalo (falha fechada: não indexa sem tratar como cancelamento) ou houver PII residual,
    ``duplicado`` se outra fonte de maior prioridade já tiver o mesmo acórdão ativo (F2-09),
    senão ``ativo``. ``removido`` e ``duplicado`` existentes não são desfeitos pela recoleta.
+   Um acórdão posto em quarentena pela revisão por amostra (vazamento, F1-42) só sai dela
+   quando chega com outra ``anonimizacao_versao``, isto é, reprocessado com regras corrigidas.
 6. Dedup entre fontes (F2-09; ARCHITECTURE.md, seção 3.5): mesmo ``numero_processo`` e mesma
    data de referência (julgamento; na falta, publicação ou disponibilização) em outra fonte.
    Prioridade: API do próprio tribunal > DJEN. O de menor prioridade fica ``duplicado``, com
@@ -39,6 +41,8 @@ SITUACOES_PERSISTENTES = ("removido", "duplicado")
 ORDEM_PADRAO: tuple[str, ...] = ("tjdft", "djen")
 Prioridades = Mapping[str, Sequence[str]]
 MOTIVO_DUPLICADO = "mesmo processo e data em fonte de maior prioridade"
+# Quarentena da revisão por amostra (F1-42): o motivo guarda a versão da anonimização que vazou.
+MOTIVO_VAZAMENTO = "revisão por amostra: vazamento na anonimização "
 
 _COLUNAS_CONTEUDO = (
     "identificador_fonte",
@@ -233,7 +237,7 @@ def upsert(
     }
     atual = conexao.execute(
         text("""
-            SELECT id, hash_conteudo, situacao::text AS situacao FROM acordao
+            SELECT id, hash_conteudo, situacao::text AS situacao, motivo_situacao FROM acordao
             WHERE fonte = CAST(:fonte AS fonte) AND id_fonte = :id_fonte
             FOR UPDATE
         """),
@@ -266,6 +270,9 @@ def upsert(
             prioridades=prioridades,
         )
 
+    if retido_pela_revisao(atual.situacao, atual.motivo_situacao, acordao.anonimizacao_versao):
+        situacao, motivo = "quarentena", atual.motivo_situacao
+        valores |= {"situacao": situacao, "motivo_situacao": motivo, "duplicata_de": None}
     mudou = atual.hash_conteudo != acordao.hash_conteudo
     if mudou:
         conexao.execute(
@@ -293,6 +300,35 @@ def upsert(
     if situacao == "ativo" and atual.situacao not in SITUACOES_PERSISTENTES:
         marcar_duplicatas_inferiores(conexao, acordao, atual.id, prioridades)
     return Resultado.NOVA_VERSAO if mudou else Resultado.ESTADO_ATUALIZADO
+
+
+def motivo_vazamento(anonimizacao_versao: str | None) -> str:
+    return f"{MOTIVO_VAZAMENTO}({anonimizacao_versao or 'sem versão'})"
+
+
+def retido_pela_revisao(situacao: str, motivo: str | None, anonimizacao_versao: str | None) -> bool:
+    """Marcado como vazamento na revisão e ainda com a mesma versão da anonimização?"""
+    return situacao == "quarentena" and motivo == motivo_vazamento(anonimizacao_versao)
+
+
+def marcar_vazamento(conexao: Connection, acordao_id: int) -> bool:
+    """Quarentena imediata de um acórdão marcado como "vazou" na revisão (F1-42).
+
+    Sai da busca e do detalhe na hora. Só volta quando for reprocessado com outra versão da
+    anonimização (regras corrigidas); a recoleta com as mesmas regras não o libera.
+    """
+    marcado = conexao.execute(
+        text("""
+            UPDATE acordao SET situacao = 'quarentena',
+                motivo_situacao = :prefixo || '(' || coalesce(anonimizacao_versao, 'sem versão')
+                    || ')',
+                atualizado_em = now()
+            WHERE id = :id AND situacao NOT IN ('removido')
+            RETURNING id
+        """),
+        {"id": acordao_id, "prefixo": MOTIVO_VAZAMENTO},
+    ).one_or_none()
+    return marcado is not None
 
 
 def _valor(coluna: str) -> str:
