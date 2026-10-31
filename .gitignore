@@ -1,8 +1,8 @@
 # Dados coletados, brutos filtrados, cadernos temporários e pesos de modelos
 /data/
 
-# Conjunto de avaliação do NER: só em ambiente local restrito, nunca no repositório
-# (ARCHITECTURE.md, seção 6.3)
+# Amostra e marcações da revisão por amostra (dados reais): só na máquina do revisor, nunca no
+# repositório (ARCHITECTURE.md, seção 6.7)
 ner-avaliacao-privado/
 
 # Configuração local

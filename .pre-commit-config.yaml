@@ -46,7 +46,7 @@ repos:
         exclude: ^backend/tests/fixtures/
 
       - id: proibir-avaliacao-ner
-        name: proibir o conjunto de avaliação do NER
-        entry: o conjunto de avaliação do NER fica só no ambiente local restrito
+        name: proibir a pasta privada da revisão por amostra
+        entry: a amostra e as marcações da revisão ficam só na máquina do revisor
         language: fail
         files: (^|/)ner-avaliacao-privado/
