@@ -56,7 +56,7 @@ def test_item_de_ponta_a_ponta() -> None:
     )
     assert acordao.link_tribunal == "https://tribunal.exemplo.invalid/consulta/documento/900001"
     assert acordao.ementa.startswith("EMENTA: DIREITO PENAL.")
-    assert acordao.anonimizacao_versao == "c1-1+cpf-1+ner-falso-1"
+    assert acordao.anonimizacao_versao == "c1-1+cpf-1+doc-1+ner-falso-1"
     assert acordao.anonimizacao_substituicoes > 0
     assert (acordao.ativo_fonte, acordao.status_fonte, acordao.data_cancelamento) == (
         True,

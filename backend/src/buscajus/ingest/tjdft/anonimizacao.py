@@ -6,26 +6,28 @@ ementa e à decisão (dispositivo) de cada registro aceito, antes de qualquer gr
 1. camada 2: NER de pessoas → iniciais, pela mesma interface ``DetectorPessoas`` e com as
    mesmas exceções (magistrados do próprio acórdão, títulos de magistrado em precedentes,
    epônimos);
-2. mascaramento de CPF (F1-39);
-3. invariante: nenhum CPF sem máscara; se sobrar, o registro é recusado (:class:`Rejeicao`) e
-   só o uuid é contado.
+2. mascaramento de CPF (F1-39) e de documentos de identificação (F1-41);
+3. invariante: nenhum CPF nem documento sem máscara; se sobrar, o registro é recusado
+   (:class:`Rejeicao`) e só o uuid é contado.
 
 Não há camada 1: a API do TJDFT não traz partes nem destinatários. O texto é puro (sem HTML).
 Sem detector de NER não há anonimizador: :func:`criar_anonimizador` falha antes de qualquer
 acesso à fonte, para que nada real seja gravado sem a camada 2.
 """
 
+from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
 from buscajus.ingest.anonimizacao import Rejeicao
 from buscajus.ingest.anonimizacao import camada2 as c2
 from buscajus.ingest.anonimizacao.cpf import mascarar_cpf, tem_cpf
-from buscajus.ingest.anonimizacao.pipeline import LIMITE_SUBSTITUICOES, ErroAnonimizacao
+from buscajus.ingest.anonimizacao.documentos import mascarar_documentos, tem_documento
+from buscajus.ingest.anonimizacao.pipeline import CAMADAS, LIMITE_SUBSTITUICOES, ErroAnonimizacao
 from buscajus.ingest.relator import normalizar_relator
 from buscajus.ingest.texto import decodificar
 
-VERSAO = "cpf-1"
+VERSAO = "cpf-1+doc-1"
 CAMPOS_TEXTO = ("ementa", "decisao")
 # Magistrados do próprio acórdão: agentes públicos no exercício da função, ficam no texto.
 CAMPOS_MAGISTRADOS = ("nomeRelator", "nomeRelatorDesignado", "nomeRevisor")
@@ -45,12 +47,14 @@ class AnonimizadorTjdft:
     def __init__(self, detector: c2.DetectorPessoas) -> None:
         self._detector = detector
         self.versao = f"{VERSAO}+ner-{detector.versao}"
+        # Sem camada 1 no TJDFT; a chave fica para o relatório ter as mesmas colunas.
+        self.substituicoes: Counter[str] = Counter(dict.fromkeys(CAMADAS, 0))
 
     def __call__(self, item: Mapping[str, Any]) -> dict[str, Any] | Rejeicao:
         uuid = str(item.get("uuid"))
         protegidos = magistrados(item)
         saida = dict(item)
-        total = 0
+        contagem: Counter[str] = Counter()
         for campo in CAMPOS_TEXTO:
             valor = item.get(campo)
             if valor is None:
@@ -59,12 +63,14 @@ class AnonimizadorTjdft:
                 return Rejeicao(uuid, "texto em formato inesperado")
             texto, pessoas = c2.aplicar(decodificar(valor), self._detector, protegidos)
             texto, cpfs = mascarar_cpf(texto)
-            if tem_cpf(texto):
-                return Rejeicao(uuid, "CPF restante no texto")
+            texto, documentos = mascarar_documentos(texto)
+            if tem_cpf(texto) or tem_documento(texto):
+                return Rejeicao(uuid, "CPF ou documento restante no texto")
             saida[campo] = texto
-            total += pessoas + cpfs
+            contagem.update(camada2=pessoas, cpf=cpfs, documentos=documentos)
+        self.substituicoes.update(contagem)
         saida["anonimizacao_versao"] = self.versao
-        saida["anonimizacao_substituicoes"] = min(total, LIMITE_SUBSTITUICOES)
+        saida["anonimizacao_substituicoes"] = min(sum(contagem.values()), LIMITE_SUBSTITUICOES)
         return saida
 
 

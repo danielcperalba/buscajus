@@ -60,7 +60,7 @@ def test_pessoas_e_cpfs_saem_e_excecoes_ficam(anonimizar: AnonimizadorTjdft) -> 
         assert numero in ementa
     for preservado in dados.PRESERVADOS:
         assert preservado in ementa + decisao
-    assert resultado["anonimizacao_versao"] == "cpf-1+ner-falso-1"
+    assert resultado["anonimizacao_versao"] == "cpf-1+doc-1+ner-falso-1"
     assert resultado["anonimizacao_substituicoes"] == 4
 
 
@@ -90,7 +90,7 @@ def test_cpf_que_sobra_recusa_o_registro(
 ) -> None:
     monkeypatch.setattr(anonimizacao, "mascarar_cpf", lambda texto: (texto, 0))
     resultado = anonimizar(registro(5))
-    assert resultado == Rejeicao(uuid(5), "CPF restante no texto")
+    assert resultado == Rejeicao(uuid(5), "CPF ou documento restante no texto")
 
 
 def test_decisao_nula_e_aceita(anonimizar: AnonimizadorTjdft) -> None:

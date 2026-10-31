@@ -8,6 +8,7 @@ Devolve só os **tipos** encontrados, nunca os trechos.
 import re
 
 from buscajus.ingest.anonimizacao.cpf import tem_cpf
+from buscajus.ingest.anonimizacao.documentos import tem_documento
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", re.IGNORECASE)
 _TELEFONE = re.compile(
@@ -42,4 +43,6 @@ def verificar_pii(texto: str) -> list[str]:
     motivos = [nome for nome, procurar in VERIFICACOES if procurar(texto)]
     if tem_cpf(texto):
         motivos.append("cpf")
+    if tem_documento(texto):
+        motivos.append("documento")
     return motivos
