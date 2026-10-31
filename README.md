@@ -86,7 +86,7 @@ uv run buscajus ingest conferir-tjdft [--de-dias 31] [--ate-dias 90]
 uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]
 ```
 
-- **As coletas exigem o modelo de NER** (`BUSCAJUS_ANONIMIZACAO__MODELO_NER`, camada 2 da anonimização, F1-36/F1-37). Sem ele, `ingest djen`, `ingest tjdft` e `verificar-versoes` saem com código 2 antes de qualquer acesso à fonte.
+- **As coletas exigem o modelo de NER** (camada 2 da anonimização; modelo e revisão fixados em `anonimizacao.modelo_ner`/`revisao_ner`, F1-36/F1-37). Os pesos vão para o volume de modelos só por `buscajus modelos baixar-ner` (no compose: `docker compose run --rm worker buscajus modelos baixar-ner`); fora do contêiner, exigem `uv sync --group ner`. Sem os pesos, `ingest djen`, `ingest tjdft` e `verificar-versoes` saem com código 2 antes de qualquer acesso à fonte.
 - A API do DJEN bloqueia IPs fora do Brasil: a coleta roda de uma máquina no Brasil.
 - O relatório de `status` traz comunicações lidas, acórdãos aceitos, rejeitados pela anonimização, quarentena, cancelados, falhas de parser, respostas 429 e o último erro; nas janelas do TJDFT, também os descartados por segredo de justiça (só a contagem).
 - Os comandos imprimem só o resultado (JSON) na saída padrão; os logs, em JSON, vão para a saída de erro.
@@ -94,6 +94,47 @@ uv run buscajus ingest status [--fonte djen|tjdft] [--tribunal TJPR] [--de AAAA-
 - No TJDFT, cada dia é conferido antes de gravar: se os uuids únicos não baterem com o total da API, o dia é relido (até 3 vezes) e, persistindo, fica com erro.
 - O agendador do `worker` (DJEN: coleta diária e checagem de versões; TJDFT: dia mais recente, reconsulta do anterior e recoleta dos últimos 30 dias) fica desligado por padrão (`BUSCAJUS_AGENDADOR__ATIVO=false`).
 - A tabela de classes processuais (`classe_cnj`) vem da TPU do CNJ, num arquivo versionado. Para atualizá-la: `uv run python scripts/atualizar_tpu.py` (em `backend/`) e uma migração que chame `carregar_tpu`.
+
+### Piloto local e revisão por amostra
+
+Teste pequeno e temporário com dados reais, para o dono do projeto validar a anonimização antes de qualquer carga no servidor (ARCHITECTURE.md, seção 6.7). O banco é o do compose de desenvolvimento: nada vai para a internet nem para backup. A carga é **ponto de parada** (F1-43): só roda com a aprovação do dono do projeto.
+
+Sequência: **carga → revisão → resultado → limpeza**.
+
+```bash
+docker compose up -d db
+docker compose run --rm worker buscajus modelos baixar-ner   # uma vez: pesos do NER no volume
+
+cd backend
+# 1. Carga: 5 dias úteis recentes do TJPR (DJEN) e 5 do TJDFT, sempre pelo worker do compose.
+#    Recusa se o repositório ou a pasta da revisão estiverem no OneDrive, Dropbox, Google Drive…
+uv run buscajus piloto carregar [--dias-uteis 5]
+
+# 2. Revisão: sorteia 100 ementas já anonimizadas para ner-avaliacao-privado/ e mostra uma por
+#    vez; responda ok ou vazou (e digite o trecho que escapou). Dá para sair e continuar depois.
+#    "Vazou" põe o acórdão em quarentena na hora.
+uv run buscajus revisao amostrar --n 100
+uv run buscajus revisao revisar
+
+# 3. Resultado: só agregados (revisadas, vazamentos, taxa, limite superior de 95%), gravados
+#    em docs/revisao-anonimizacao.md.
+uv run buscajus revisao resultado
+
+# Com vazamento: corrija as regras e confira se elas pegam os trechos marcados (só contagens);
+# depois rode `piloto carregar` de novo (a carga piloto sempre reprocessa os dias) e sorteie
+# nova amostra.
+uv run buscajus revisao verificar
+uv run buscajus revisao amostrar --n 100 --nova-rodada
+
+# 4. Limpeza (com confirmação): acórdãos, histórico e coleta do banco local, volume raw e a
+#    pasta ner-avaliacao-privado/. Ficam o esquema, a classe_cnj e os sintéticos (processos de 2099).
+uv run buscajus piloto limpar
+```
+
+- Critério: **0 vazamentos em 100 ementas** libera as cargas no servidor de produção; qualquer vazamento leva a corrigir as regras, reprocessar e revisar nova amostra de 100. Depois do lançamento, amostra mensal de 30 ementas novas (`revisao amostrar --n 30 --desde AAAA-MM-DD`).
+- `revisar` e `verificar` usam o banco local (`BUSCAJUS_DATABASE_URL`, padrão `127.0.0.1:5432`); `verificar` também precisa do grupo `ner` e dos pesos em `data/modelos` (ou rode-o no worker, montando a pasta).
+- A pasta `ner-avaliacao-privado/` está no `.gitignore` e o pre-commit bloqueia qualquer arquivo dela. Ela é apagada ao fim de cada piloto ou 30 dias depois de cada aprovação (F1-40).
+- O piloto não exige disco criptografado; o servidor de produção, sim (docs/implantacao.md).
 
 ### API
 
@@ -179,4 +220,4 @@ Os hooks rodam ruff e prettier com as versões dos lockfiles e bloqueiam arquivo
 
 ## Privacidade
 
-Não guardamos nomes de partes nem de advogados, e nomes de pessoas físicas citados nas ementas são trocados por iniciais antes de qualquer gravação. Os detalhes estão no [ARCHITECTURE.md](ARCHITECTURE.md), seção 6.
+Não guardamos nomes de partes nem de advogados; nomes de pessoas físicas citados nas ementas são trocados por iniciais e números de CPF e de documentos de identificação são mascarados antes de qualquer gravação. Os detalhes estão no [ARCHITECTURE.md](ARCHITECTURE.md), seção 6.

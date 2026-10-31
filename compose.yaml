@@ -60,6 +60,11 @@ services:
   worker:
     <<: *backend
     command: ["buscajus-worker"]
+    environment:
+      <<: *backend-env
+      # O piloto com dados reais (buscajus piloto executar-carga|executar-limpeza) só roda
+      # aqui: contêiner Linux com tmpfs para os cadernos (ARCHITECTURE.md, seção 6.7).
+      BUSCAJUS_EM_CONTEINER: "1"
     volumes:
       - raw:/dados/raw
       - modelos:/dados/modelos

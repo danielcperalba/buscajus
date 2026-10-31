@@ -13,6 +13,9 @@ Comandos:
 - ``buscajus api openapi`` (imprime o contrato; versionado em ``frontend/openapi.json``)
 - ``buscajus eval pool --consultas ARQ --saida ARQ.csv [--modelo NOME[@REVISAO]]... [--k 20]``
 - ``buscajus eval metricas --consultas ARQ --julgamentos ARQ.csv [--modelo NOME[@REVISAO]]...``
+- ``buscajus modelos baixar-ner`` (pesos do NER para o volume de modelos; passo explícito)
+- ``buscajus revisao amostrar --n 100 | revisar | resultado | verificar`` (revisão por amostra)
+- ``buscajus piloto carregar | limpar`` (piloto local, pelo worker do compose)
 
 As coletas do DJEN e do TJDFT exigem o modelo de NER configurado (camada 2 da anonimização);
 sem ele, o comando falha antes de qualquer acesso à fonte.
@@ -21,10 +24,11 @@ sem ele, o comando falha antes de qualquer acesso à fonte.
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 
+from buscajus import piloto, revisao
 from buscajus.busca import pedidos
 from buscajus.core.config import obter_config
 from buscajus.core.logging import configurar_logging
@@ -44,6 +48,7 @@ from buscajus.embed.indice import (
     documentos_ativos,
 )
 from buscajus.ingest import status
+from buscajus.ingest.anonimizacao.modelo_ner import baixar_modelo, carregar_detector
 from buscajus.ingest.anonimizacao.pipeline import ErroAnonimizacao
 from buscajus.ingest.bruto import ArmazenamentoBruto
 from buscajus.ingest.djen import fabrica
@@ -151,6 +156,55 @@ def _parser() -> argparse.ArgumentParser:
             help="NOME[@REVISAO]; repetível (padrão: embeddings.modelo da configuração)",
         )
         sub.add_argument("--limite", type=int, help="máximo de acórdãos no índice temporário")
+
+    modelos = comandos.add_parser("modelos", help="pesos dos modelos locais")
+    sub_modelos = modelos.add_subparsers(dest="subcomando", required=True)
+    baixar = sub_modelos.add_parser(
+        "baixar-ner", help="baixa a revisão fixada do NER para o volume de modelos"
+    )
+    baixar.set_defaults(executar=_baixar_ner)
+
+    rev = comandos.add_parser("revisao", help="revisão por amostra da anonimização (F1-42)")
+    sub_rev = rev.add_subparsers(dest="subcomando", required=True)
+    amostra = sub_rev.add_parser("amostrar", help="sorteia ementas anonimizadas do banco local")
+    amostra.add_argument("--n", type=int, default=revisao.META_APROVACAO)
+    amostra.add_argument("--fracao-tjdft", type=float, default=revisao.FRACAO_TJDFT)
+    amostra.add_argument("--desde", type=_data, help="só acórdãos coletados a partir da data")
+    amostra.add_argument(
+        "--nova-rodada", action="store_true", help="arquiva a amostra atual e sorteia outra"
+    )
+    amostra.add_argument("--semente", type=int)
+    amostra.set_defaults(executar=_revisao_amostrar)
+    rv = sub_rev.add_parser("revisar", help="mostra uma ementa por vez: ok ou vazou")
+    rv.set_defaults(executar=_revisao_revisar)
+    res = sub_rev.add_parser("resultado", help="agregados da rodada e relatório em docs/")
+    res.add_argument("--relatorio", type=Path, help="padrão: docs/revisao-anonimizacao.md")
+    res.add_argument("--meta", type=int, default=revisao.META_APROVACAO)
+    res.set_defaults(executar=_revisao_resultado)
+    ver = sub_rev.add_parser(
+        "verificar", help="confere se as regras atuais pegam os trechos marcados (contagens)"
+    )
+    ver.set_defaults(executar=_revisao_verificar)
+    for sub in (amostra, rv, res, ver):
+        sub.add_argument("--pasta", type=Path, help=f"padrão: {revisao.NOME_PASTA}/ na raiz")
+
+    pil = comandos.add_parser("piloto", help="piloto local com dados reais (F1-43, F1-44)")
+    sub_pil = pil.add_subparsers(dest="subcomando", required=True)
+    carregar = sub_pil.add_parser(
+        "carregar", help="carga piloto pelo worker do compose (ponto de parada F1-43)"
+    )
+    carregar.add_argument("--dias-uteis", type=int, default=piloto.DIAS_UTEIS)
+    carregar.set_defaults(executar=_piloto_carregar)
+    limpar_piloto = sub_pil.add_parser("limpar", help="apaga todos os dados reais do piloto")
+    limpar_piloto.add_argument("--sim", action="store_true", help="não pede confirmação")
+    limpar_piloto.set_defaults(executar=_piloto_limpar)
+    for sub in (carregar, limpar_piloto):
+        sub.add_argument("--pasta-revisao", type=Path, help=f"padrão: {revisao.NOME_PASTA}/")
+    exec_carga = sub_pil.add_parser("executar-carga", help="(só no worker) carga piloto")
+    exec_carga.add_argument("--dias-uteis", type=int, default=piloto.DIAS_UTEIS)
+    exec_carga.set_defaults(executar=_piloto_executar_carga)
+    exec_limpeza = sub_pil.add_parser("executar-limpeza", help="(só no worker) limpeza")
+    exec_limpeza.set_defaults(executar=_piloto_executar_limpeza)
     return parser
 
 
@@ -385,6 +439,115 @@ def _eval_metricas(args: argparse.Namespace) -> int:
     return 0
 
 
+def _baixar_ner(_args: argparse.Namespace) -> int:
+    config = obter_config()
+    caminho = baixar_modelo(config.anonimizacao, config.diretorio_modelos)
+    carregar_detector(config.anonimizacao, config.diretorio_modelos)  # confere o carregamento
+    _imprimir({"modelo": config.anonimizacao.modelo_ner, "caminho": str(caminho)})
+    return 0
+
+
+def _pasta_revisao(pasta: Path | None) -> Path:
+    if pasta is not None:
+        return pasta
+    try:
+        return piloto.raiz_repositorio() / revisao.NOME_PASTA
+    except piloto.ErroPiloto:
+        return Path(revisao.NOME_PASTA)
+
+
+def _revisao_amostrar(args: argparse.Namespace) -> int:
+    pasta = _pasta_revisao(args.pasta)
+    piloto.conferir_pastas([pasta])
+    _imprimir(
+        revisao.amostrar(
+            obter_engine(),
+            pasta,
+            n=args.n,
+            fracao_tjdft=args.fracao_tjdft,
+            desde=args.desde,
+            nova_rodada=args.nova_rodada,
+            semente=args.semente,
+        )
+    )
+    return 0
+
+
+def _revisao_revisar(args: argparse.Namespace) -> int:
+    pasta = _pasta_revisao(args.pasta)
+    piloto.conferir_pastas([pasta])
+    _imprimir(revisao.revisar(obter_engine(), pasta))
+    return 0
+
+
+def _revisao_resultado(args: argparse.Namespace) -> int:
+    relatorio = args.relatorio
+    if relatorio is None:
+        relatorio = piloto.raiz_repositorio() / "docs" / "revisao-anonimizacao.md"
+    _imprimir(revisao.resultado(_pasta_revisao(args.pasta), relatorio, meta=args.meta))
+    return 0
+
+
+def _revisao_verificar(args: argparse.Namespace) -> int:
+    config = obter_config()
+    detector = carregar_detector(config.anonimizacao, config.diretorio_modelos)
+    if detector is None:
+        raise ErroAnonimizacao("nenhum modelo de NER configurado (camada 2)")
+    _imprimir(revisao.verificar(_pasta_revisao(args.pasta), detector))
+    return 0
+
+
+def _piloto_conferir(args: argparse.Namespace) -> Path:
+    raiz = piloto.raiz_repositorio()
+    piloto.conferir_pastas([raiz, _pasta_revisao(args.pasta_revisao)])
+    return raiz
+
+
+def _piloto_carregar(args: argparse.Namespace) -> int:
+    raiz = _piloto_conferir(args)
+    codigo, saida = piloto.chamar_worker(
+        raiz, ["executar-carga", "--dias-uteis", str(args.dias_uteis)]
+    )
+    sys.stdout.write(saida)
+    return codigo
+
+
+def _piloto_limpar(args: argparse.Namespace, ler: Callable[[str], str] = input) -> int:
+    raiz = _piloto_conferir(args)
+    pasta = _pasta_revisao(args.pasta_revisao)
+    if not args.sim:
+        sys.stderr.write(
+            "Isto apaga TODOS os dados reais do piloto: acórdãos, histórico e coleta no banco "
+            f"local, os arquivos do volume raw e a pasta {pasta}.\n"
+        )
+        if ler("Digite APAGAR para confirmar: ").strip() != "APAGAR":
+            sys.stderr.write("buscajus: limpeza cancelada\n")
+            return 1
+    codigo, saida = piloto.chamar_worker(raiz, ["executar-limpeza"])
+    if codigo != 0:
+        sys.stdout.write(saida)
+        return codigo
+    resultado = json.loads(saida) if saida.strip() else {}
+    resultado["arquivos_pasta_revisao"] = piloto.limpar_diretorio(pasta)
+    if pasta.exists():
+        pasta.rmdir()
+    _imprimir(resultado)
+    return 0
+
+
+def _piloto_executar_carga(args: argparse.Namespace) -> int:
+    volumes = piloto.executar_carga(
+        obter_config(), obter_engine(), hoje=hoje_sao_paulo(), dias_uteis=args.dias_uteis
+    )
+    _imprimir(piloto.volumes_dict(volumes))
+    return 1 if any(volumes.erros.values()) else 0
+
+
+def _piloto_executar_limpeza(_args: argparse.Namespace) -> int:
+    _imprimir(piloto.executar_limpeza(obter_config(), obter_engine()))
+    return 0
+
+
 def _saidas_em_utf8() -> None:
     """No Windows a saída padrão é cp1252 com CRLF; o resultado sai sempre em UTF-8 com LF."""
     for fluxo in (sys.stdout, sys.stderr):
@@ -399,7 +562,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         codigo: int = args.executar(args)
-    except (ErroAnonimizacao, ConectorDesativado, pedidos.PedidoInvalido) as exc:
+    except (
+        ErroAnonimizacao,
+        ConectorDesativado,
+        pedidos.PedidoInvalido,
+        revisao.ErroRevisao,
+        piloto.ErroPiloto,
+    ) as exc:
         sys.stderr.write(f"buscajus: {exc}\n")
         return 2
     except ModuleNotFoundError as exc:
