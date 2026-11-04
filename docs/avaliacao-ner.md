@@ -65,7 +65,15 @@ Métricas, com as exceções da camada 2 já aplicadas:
 - *recall (nome inteiro)*: nomes com todos os tokens substituídos;
 - *recall (algum token)*: nomes com pelo menos um token substituído;
 - *precisão*: substituições que caíram num nome a anonimizar (o resto é anonimização a mais);
+- *substituições indevidas*: substituições que não tocam nenhum nome a anonimizar;
+- *excesso (tokens não sensíveis)*: tokens fora dos nomes a anonimizar (os nomes a manter
+  inclusive) que foram substituídos, sobre o total desses tokens;
 - *manter preservados*: relatores, magistrados citados e epônimos que ficaram.
+
+Os pesos são carregados só de `model.safetensors` (`use_safetensors=True`, como no pipeline),
+nunca de pickle. Por isso o `pierreguillou/ner-bert-base-cased-pt-lenerbr` é avaliado na
+revisão `a9cbb40` (conversão para safetensors do SFconvertbot, `refs/pr/4`, logo depois da
+`4ca0a39` usada em 30/10, que só tem `pytorch_model.bin`); os números não mudaram.
 
 Reproduzir (em `backend/`; baixa os modelos para o cache do Hugging Face da máquina):
 
@@ -138,6 +146,31 @@ Tempo médio por ementa: 253 ms sem a variante de caixa, 490 ms com ela.
 | limiar 0,05 a 0,9, com variante de caixa | 137 | 0 | 1.000 | 0.993 | 9/9 |
 
 Tempo médio por ementa: 88 ms sem a variante de caixa, 138 ms com ela.
+
+### Excesso de anonimização (03/11/2026)
+
+Mesmo conjunto, com as duas métricas de excesso. Recall, vazamentos e precisão são os mesmos
+de 30/10 em todos os modelos.
+
+| | substituições indevidas | excesso (tokens não sensíveis) |
+|---|---|---|
+| `bertimbau-base`, limiar 0,05 e 0,1 (com ou sem variante de caixa) | 1 | 3/1649 (0,2%) |
+| `bertimbau-base`, limiar 0,2 a 0,9 | 1 | 2/1649 (0,1%) |
+| `bertimbau-large`, limiar 0,05 a 0,7 | 1 | 3/1649 (0,2%) |
+| `pierreguillou`, todos os limiares | 1 | 4/1649 (0,2%) |
+
+Configuração escolhida (limiar 0,1, com variante de caixa), por estrato:
+
+| | substituições indevidas | excesso (tokens não sensíveis) |
+|---|---|---|
+| criminal | 0 | 1/1017 (0,1%) |
+| família | 1 | 2/258 (0,8%) |
+| cível | 0 | 0/374 (0,0%) |
+| **total** | 1 | 3/1649 (0,2%) |
+
+A substituição indevida é o doutrinador citado (2 tokens); o terceiro token é uma palavra
+vizinha a um nome do criminal que entrou na mesma entidade. Na revisão por amostra com dados
+reais, o excesso é contado pela opção "anonimizou demais" de `buscajus revisao revisar`.
 
 ## Limites desta avaliação
 
