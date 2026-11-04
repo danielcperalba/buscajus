@@ -99,3 +99,25 @@ export function formatarData(iso: string | null | undefined): string | undefined
   const partes = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
   return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : undefined;
 }
+
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** "2026-10-19" → "19 de outubro de 2026" (sobretítulo de cartões e do detalhe). */
+export function formatarDataExtensa(iso: string | null | undefined): string | undefined {
+  const partes = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+  const mes = partes ? MESES[Number(partes[2]) - 1] : undefined;
+  return partes && mes ? `${Number(partes[3])} de ${mes} de ${partes[1]}` : undefined;
+}

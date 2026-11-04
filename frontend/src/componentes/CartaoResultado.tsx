@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type { ResultadoBusca } from "@/api/cliente";
 import { CopiarCitacao } from "@/componentes/CopiarCitacao";
-import { formatarData, trechoSeguro } from "@/lib/busca";
+import { formatarData, formatarDataExtensa, trechoSeguro } from "@/lib/busca";
 
 // h3 quando a lista fica dentro de uma seção com título h2 (acórdãos recentes, F5-13).
 type Props = { resultado: ResultadoBusca; nivelTitulo?: 2 | 3 };
@@ -30,9 +30,15 @@ export function CartaoResultado({ resultado, nivelTitulo = 2 }: Props) {
     ...datas,
   ].filter((par): par is [string, string] => Boolean(par[1]));
   const tituloId = `resultado-${resultado.id}`;
+  const dataPrincipal = formatarDataExtensa(
+    resultado.data_publicacao ?? resultado.data_disponibilizacao ?? resultado.data_julgamento,
+  );
 
   return (
     <article className="cartao" aria-labelledby={tituloId}>
+      <p className="sobretitulo" aria-hidden="true">
+        {[resultado.tribunal, dataPrincipal].filter(Boolean).join(" · ")}
+      </p>
       <Titulo id={tituloId} className="cartao-numero">
         <Link href={`/acordao/${resultado.id}`}>{resultado.numero_processo}</Link>
       </Titulo>

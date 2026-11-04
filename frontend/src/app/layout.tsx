@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
+import { Noto_Serif } from "next/font/google";
 import Link from "next/link";
 
 import "./globals.css";
+
+// Títulos em serifa, como num artigo; o next/font hospeda o arquivo no próprio site (sem
+// requisição ao Google no navegador, compatível com a CSP).
+const serifa = Noto_Serif({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+  variable: "--fonte-serifa",
+});
 
 export const metadata: Metadata = {
   title: { default: "BuscaJus", template: "%s | BuscaJus" },
@@ -21,7 +31,7 @@ const RODAPE = [
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={serifa.variable}>
       <body>
         <a className="pular-para-conteudo" href="#conteudo">
           Pular para o conteúdo
@@ -29,7 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <header className="cabecalho">
           <div className="largura">
             <Link href="/" className="marca">
-              BuscaJus
+              buscajus<span aria-hidden="true">.</span>
             </Link>
             <nav aria-label="Principal">
               <ul>

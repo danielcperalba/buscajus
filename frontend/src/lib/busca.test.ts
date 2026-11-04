@@ -4,6 +4,7 @@ import {
   consultaApi,
   filtrosAtivos,
   formatarData,
+  formatarDataExtensa,
   lerEstado,
   trechoSeguro,
   urlBusca,
@@ -62,5 +63,18 @@ describe("exibição", () => {
     expect(formatarData("2026-10-08")).toBe("08/10/2026");
     expect(formatarData(null)).toBeUndefined();
     expect(formatarData("ontem")).toBeUndefined();
+  });
+});
+
+describe("formatarDataExtensa", () => {
+  it("escreve o mês por extenso, sem zero à esquerda no dia", () => {
+    expect(formatarDataExtensa("2026-10-09")).toBe("9 de outubro de 2026");
+    expect(formatarDataExtensa("2026-03-21T00:00:00Z")).toBe("21 de março de 2026");
+  });
+
+  it("devolve undefined para valor ausente ou inválido", () => {
+    expect(formatarDataExtensa(null)).toBeUndefined();
+    expect(formatarDataExtensa("2026-13-01")).toBeUndefined();
+    expect(formatarDataExtensa("ontem")).toBeUndefined();
   });
 });

@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import type { DetalheAcordao, Indisponivel } from "@/api/cliente";
 import { CopiarCitacao } from "@/componentes/CopiarCitacao";
-import { formatarData } from "@/lib/busca";
+import { TextoFormatado } from "@/componentes/TextoFormatado";
+import { formatarData, formatarDataExtensa } from "@/lib/busca";
 
 function metadados(acordao: DetalheAcordao): [string, string][] {
   const pares: [string, string | null | undefined][] = [
@@ -19,69 +20,100 @@ function metadados(acordao: DetalheAcordao): [string, string][] {
   return pares.filter((par): par is [string, string] => Boolean(par[1]));
 }
 
-/** Página de detalhe de um acórdão (F5-08). */
+/** Título de seção numerado ("1. Ementa"); o número é visual e fica fora do nome acessível. */
+function TituloSecao({ id, numero, children }: { id: string; numero: number; children: string }) {
+  return (
+    <h2 id={id} className="titulo-secao">
+      <span aria-hidden="true">{numero}. </span>
+      {children}
+    </h2>
+  );
+}
+
+/** Página de detalhe de um acórdão (F5-08), no layout de artigo (cabeça centralizada). */
 export function Detalhe({ acordao }: { acordao: DetalheAcordao }) {
   const remocao = `/remocao?referencia=${encodeURIComponent(`/acordao/${acordao.id}`)}`;
+  const data = formatarDataExtensa(
+    acordao.data_publicacao ?? acordao.data_disponibilizacao ?? acordao.data_julgamento,
+  );
+  const subtitulo = [acordao.classe.nome, acordao.orgao_julgador].filter(Boolean).join(" · ");
+  let secao = 0;
   return (
     <article className="detalhe">
-      <p className="detalhe-rotulo">Acórdão · {acordao.tribunal}</p>
-      <h1>{acordao.numero_processo}</h1>
-      <dl className="cartao-metadados detalhe-metadados">
-        {metadados(acordao).map(([rotulo, valor]) => (
-          <div key={rotulo}>
-            <dt>{rotulo}</dt>
-            <dd>{valor}</dd>
-          </div>
-        ))}
-      </dl>
+      <header className="cabeca-artigo">
+        <p className="sobretitulo">
+          Acórdão · {acordao.tribunal}
+          {data ? ` · ${data}` : null}
+        </p>
+        <h1>{acordao.numero_processo}</h1>
+        {subtitulo ? <p className="subtitulo">{subtitulo}</p> : null}
+        <dl className="cartao-metadados detalhe-metadados">
+          {metadados(acordao).map(([rotulo, valor]) => (
+            <div key={rotulo}>
+              <dt>{rotulo}</dt>
+              <dd>{valor}</dd>
+            </div>
+          ))}
+        </dl>
+      </header>
 
-      <section aria-labelledby="titulo-ementa">
-        <h2 id="titulo-ementa">Ementa</h2>
-        <p className="texto-integral">{acordao.ementa}</p>
-      </section>
-
-      {acordao.decisao ? (
-        <section aria-labelledby="titulo-decisao">
-          <h2 id="titulo-decisao">Dispositivo</h2>
-          <p className="texto-integral">{acordao.decisao}</p>
+      <div className="corpo-artigo">
+        <section aria-labelledby="titulo-ementa">
+          <TituloSecao id="titulo-ementa" numero={++secao}>
+            Ementa
+          </TituloSecao>
+          <TextoFormatado texto={acordao.ementa} />
         </section>
-      ) : null}
 
-      <section aria-labelledby="titulo-citacao">
-        <h2 id="titulo-citacao">Citação</h2>
-        <p className="citacao">{acordao.citacao}</p>
-        <CopiarCitacao citacao={acordao.citacao} />
-      </section>
+        {acordao.decisao ? (
+          <section aria-labelledby="titulo-decisao">
+            <TituloSecao id="titulo-decisao" numero={++secao}>
+              Dispositivo
+            </TituloSecao>
+            <TextoFormatado texto={acordao.decisao} />
+          </section>
+        ) : null}
 
-      <section aria-labelledby="titulo-fontes">
-        <h2 id="titulo-fontes">Fonte oficial</h2>
-        <ul className="links-oficiais">
-          <li>
-            <a href={acordao.link_oficial} target="_blank" rel="noopener noreferrer">
-              Ver na fonte oficial
-              <span className="visualmente-oculto"> (abre em nova aba)</span>
-            </a>
-          </li>
-          {acordao.link_tribunal ? (
+        <section aria-labelledby="titulo-citacao">
+          <TituloSecao id="titulo-citacao" numero={++secao}>
+            Citação
+          </TituloSecao>
+          <p className="citacao">{acordao.citacao}</p>
+          <CopiarCitacao citacao={acordao.citacao} />
+        </section>
+
+        <section aria-labelledby="titulo-fontes">
+          <TituloSecao id="titulo-fontes" numero={++secao}>
+            Fonte oficial
+          </TituloSecao>
+          <ul className="links-oficiais">
             <li>
-              <a href={acordao.link_tribunal} target="_blank" rel="noopener noreferrer">
-                Ver no sistema do tribunal
+              <a href={acordao.link_oficial} target="_blank" rel="noopener noreferrer">
+                Ver na fonte oficial
                 <span className="visualmente-oculto"> (abre em nova aba)</span>
               </a>
             </li>
-          ) : null}
-          <li>
-            <Link href={`/processo/${encodeURIComponent(acordao.numero_processo)}`}>
-              Outros acórdãos deste processo
-            </Link>
-          </li>
-        </ul>
-        <p className="aviso">{acordao.aviso}</p>
-      </section>
+            {acordao.link_tribunal ? (
+              <li>
+                <a href={acordao.link_tribunal} target="_blank" rel="noopener noreferrer">
+                  Ver no sistema do tribunal
+                  <span className="visualmente-oculto"> (abre em nova aba)</span>
+                </a>
+              </li>
+            ) : null}
+            <li>
+              <Link href={`/processo/${encodeURIComponent(acordao.numero_processo)}`}>
+                Outros acórdãos deste processo
+              </Link>
+            </li>
+          </ul>
+          <p className="aviso">{acordao.aviso}</p>
+        </section>
 
-      <p className="solicitar-remocao">
-        Há dado pessoal neste texto? <Link href={remocao}>Solicitar remoção</Link>
-      </p>
+        <p className="solicitar-remocao">
+          Há dado pessoal neste texto? <Link href={remocao}>Solicitar remoção</Link>
+        </p>
+      </div>
     </article>
   );
 }

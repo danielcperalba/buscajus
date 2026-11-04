@@ -113,8 +113,20 @@ EXEMPLOS = (
                 "j. 08/10/2026, publ. PJe 21/10/2026."
             ),
             ementa=(
+                # Modelo do CNJ (Recomendação 154/2024), para exibir tópicos e itens (F5-15).
                 "DIREITO CIVIL. APELAÇÃO CÍVEL. INVENTÁRIO. PARTILHA DA HERANÇA ENTRE OS "
-                "HERDEIROS. Imóvel da família. Sucessão. Recurso conhecido e desprovido."
+                "HERDEIROS. Imóvel da família. Sucessão. Recurso conhecido e desprovido.\n"
+                "I. CASO EM EXAME\n"
+                "1. Apelação contra sentença que homologou a partilha do imóvel da família.\n"
+                "II. QUESTÃO EM DISCUSSÃO\n"
+                "2. A questão consiste em saber se o imóvel integra o espólio.\n"
+                "III. RAZÕES DE DECIDIR\n"
+                "3. O imóvel foi adquirido antes do casamento, nos termos do art. 1.661 do CC.\n"
+                "4. A sentença observou a ordem de vocação hereditária.\n"
+                "IV. DISPOSITIVO E TESE\n"
+                "5. Recurso conhecido e desprovido.\n"
+                "Tese de julgamento: O bem adquirido antes do casamento não se comunica.\n"
+                "Dispositivos relevantes citados: CC, art. 1.661."
             ),
             decisao="CONHECIDO. DESPROVIDO. UNÂNIME.",
             possui_inteiro_teor=True,
