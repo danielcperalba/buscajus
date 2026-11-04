@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { DetalheAcordao, Indisponivel } from "@/api/cliente";
 import { CopiarCitacao } from "@/componentes/CopiarCitacao";
+import { TextoFormatado } from "@/componentes/TextoFormatado";
 import { formatarData, formatarDataExtensa } from "@/lib/busca";
 
 function metadados(acordao: DetalheAcordao): [string, string][] {
@@ -61,7 +62,7 @@ export function Detalhe({ acordao }: { acordao: DetalheAcordao }) {
           <TituloSecao id="titulo-ementa" numero={++secao}>
             Ementa
           </TituloSecao>
-          <p className="texto-integral capitular">{acordao.ementa}</p>
+          <TextoFormatado texto={acordao.ementa} />
         </section>
 
         {acordao.decisao ? (
@@ -69,7 +70,7 @@ export function Detalhe({ acordao }: { acordao: DetalheAcordao }) {
             <TituloSecao id="titulo-decisao" numero={++secao}>
               Dispositivo
             </TituloSecao>
-            <p className="texto-integral">{acordao.decisao}</p>
+            <TextoFormatado texto={acordao.decisao} />
           </section>
         ) : null}
 

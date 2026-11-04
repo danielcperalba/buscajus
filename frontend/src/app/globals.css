@@ -1,13 +1,16 @@
 /*
- * Tokens: contraste AA (4,5:1 ou mais) para texto em fundo claro e escuro.
- * Visual editorial: títulos em serifa, texto em coluna estreita, sobretítulos em caixa alta,
- * links em azul com realce claro.
+ * Tokens: contraste AA (4,5:1 ou mais) sobre o fundo branco.
+ * Visual editorial: fundo sempre branco (sem tema escuro), títulos em serifa quase pretos,
+ * texto em cinza-escuro, sobretítulos em caixa alta, links em azul com realce claro.
  */
 :root {
+  color-scheme: light;
   --fundo: #ffffff;
   --superficie: #f6f7f9;
-  --texto: #222326;
-  --texto-suave: #63676f;
+  --titulo: #222222;
+  --texto: #3d3d3d;
+  --texto-ementa: #666666;
+  --texto-suave: #6e6e6e;
   --borda: #e3e5e9;
   --borda-forte: #c9ced6;
   --destaque: #3943c9;
@@ -21,24 +24,6 @@
   --largura: 64rem;
   --coluna-texto: 40rem;
   --fonte-titulo: var(--fonte-serifa, "Noto Serif"), Georgia, "Times New Roman", serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fundo: #121417;
-    --superficie: #1c2025;
-    --texto: #ececec;
-    --texto-suave: #b0b6bf;
-    --borda: #2c323a;
-    --borda-forte: #3a414b;
-    --destaque: #a9b1ff;
-    --destaque-texto: #0b1220;
-    --realce: #252a52;
-    --marca-fundo: #6b5400;
-    --marca-texto: #fff8dc;
-    --erro: #ff8a8a;
-    --foco: #fbbf24;
-  }
 }
 
 * {
@@ -64,6 +49,7 @@ h3 {
   font-family: var(--fonte-titulo);
   font-weight: 400;
   line-height: 1.3;
+  color: var(--titulo);
 }
 
 a {
@@ -194,7 +180,7 @@ nav ul {
   font-size: 1.05rem;
   letter-spacing: -0.01em;
   text-decoration: none;
-  color: var(--texto);
+  color: var(--titulo);
 }
 
 .marca span {
@@ -360,7 +346,7 @@ nav ul {
 }
 
 .cartao-numero a {
-  color: var(--texto);
+  color: var(--titulo);
   text-decoration: none;
 }
 
@@ -546,18 +532,29 @@ nav ul {
   text-decoration-thickness: 1px;
 }
 
-.texto-integral {
-  white-space: pre-line;
+/* Ementa e dispositivo em parágrafos e tópicos (F5-15) */
+.texto-formatado p {
+  margin: 0 0 1rem;
 }
 
-/* Letra capitular no começo da ementa */
-.capitular::first-letter {
-  float: left;
-  font-family: var(--fonte-titulo);
-  font-weight: 700;
-  font-size: 3.4em;
-  line-height: 0.85;
-  margin: 0.08em 0.12em 0 0;
+/* Abertura da ementa (classificação): tom mais claro e espaço antes do caso */
+.texto-formatado .texto-abertura {
+  color: var(--texto-ementa);
+  margin-bottom: 2.25rem;
+}
+
+.texto-topico {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.75rem;
+}
+
+.texto-formatado > .texto-topico:first-child {
+  margin-top: 0;
+}
+
+.texto-item strong,
+.texto-formatado strong {
+  color: var(--titulo);
 }
 
 .citacao {
