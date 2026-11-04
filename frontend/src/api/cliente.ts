@@ -78,6 +78,14 @@ export async function buscar(consulta: ConsultaBusca): Promise<Resposta<Resposta
   return chamar(() => api.GET("/api/v1/busca", { params: { query: consulta } }));
 }
 
+export type RespostaRecentes = Esquemas["RespostaRecentes"];
+
+/** Acórdãos ativos da publicação mais recente à mais antiga, 10 por página (F5-13). */
+export async function obterRecentes(pagina: number): Promise<Resposta<RespostaRecentes>> {
+  const api = await cliente();
+  return chamar(() => api.GET("/api/v1/acordaos/recentes", { params: { query: { pagina } } }));
+}
+
 export async function obterFiltros(): Promise<Resposta<Filtros>> {
   const api = await cliente();
   return chamar(() => api.GET("/api/v1/filtros"));

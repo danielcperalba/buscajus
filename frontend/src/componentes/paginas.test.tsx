@@ -8,9 +8,10 @@ import Privacidade from "@/app/privacidade/page";
 import Sobre from "@/app/sobre/page";
 import { CartaoResultado } from "@/componentes/CartaoResultado";
 import { AcordaoIndisponivel, Detalhe } from "@/componentes/Detalhe";
-import { EstadoErro, EstadoVazio } from "@/componentes/Estados";
+import { EstadoErro, EstadoVazio, RecentesVazio } from "@/componentes/Estados";
 import { Filtros } from "@/componentes/Filtros";
 import { FormRemocao } from "@/componentes/FormRemocao";
+import { ListaRecentes } from "@/componentes/Recentes";
 import { lerEstado } from "@/lib/busca";
 import { type EstadoPedido, validarPedido } from "@/lib/remocao";
 import { violacoesGraves } from "@/testes/axe";
@@ -18,10 +19,19 @@ import { RESULTADO_DJEN, RESULTADO_TJDFT } from "@/testes/dados";
 
 // Componente assíncrono de servidor (lê a API): fora do escopo do jsdom; o E2E cobre.
 vi.mock("@/componentes/Cobertura", () => ({ Cobertura: () => <p>cobertura</p> }));
+vi.mock("@/componentes/Recentes", async (original) => ({
+  ...(await original<typeof import("@/componentes/Recentes")>()),
+  Recentes: () => <p>recentes</p>,
+}));
 
 vi.mock("next/form", () => ({
   default: (props: React.FormHTMLAttributes<HTMLFormElement>) => <form {...props} />,
 }));
+
+// A página inicial recebe os parâmetros da URL (a lista de recentes, mockada acima, os lê).
+function PaginaInicial() {
+  return <Inicio params={Promise.resolve({})} searchParams={Promise.resolve({})} />;
+}
 
 const DETALHE: DetalheAcordao = {
   ...RESULTADO_TJDFT,
@@ -140,7 +150,7 @@ describe("Remoção (F5-11)", () => {
 
 describe("Acessibilidade (F5-12)", () => {
   const casos: [string, () => React.ReactElement][] = [
-    ["início", () => <Inicio />],
+    ["início", () => <PaginaInicial />],
     ["sobre", () => <Sobre />],
     ["privacidade", () => <Privacidade />],
     ["detalhe", () => <Detalhe acordao={DETALHE} />],
@@ -175,6 +185,30 @@ describe("Acessibilidade (F5-12)", () => {
     ],
     ["vazio", () => <EstadoVazio filtrando />],
     ["erro", () => <EstadoErro falha={{ status: 429, erro: "limite_excedido", mensagem: "x" }} />],
+    [
+      "recentes",
+      () => (
+        <section aria-labelledby="t">
+          <h2 id="t">Acórdãos recentes</h2>
+          <ListaRecentes
+            resposta={{
+              dados: {
+                pagina: 2,
+                por_pagina: 10,
+                total: 30,
+                total_paginas: 3,
+                resultados: [RESULTADO_TJDFT, RESULTADO_DJEN],
+              },
+            }}
+          />
+        </section>
+      ),
+    ],
+    ["recentes vazio", () => <RecentesVazio />],
+    [
+      "recentes com erro",
+      () => <EstadoErro falha={{ status: 0, erro: "x", mensagem: "x" }} assunto="recentes" />,
+    ],
     ["remoção", () => <FormRemocao acao={async () => ({ situacao: "inicial" })} />],
   ];
 
@@ -184,7 +218,7 @@ describe("Acessibilidade (F5-12)", () => {
   });
 
   it("páginas têm um h1", () => {
-    for (const Pagina of [Inicio, Sobre, Privacidade]) {
+    for (const Pagina of [PaginaInicial, Sobre, Privacidade]) {
       const { container, unmount } = render(<Pagina />);
       expect(within(container).getAllByRole("heading", { level: 1 })).toHaveLength(1);
       unmount();

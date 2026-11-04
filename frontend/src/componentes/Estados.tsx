@@ -3,11 +3,11 @@ import Link from "next/link";
 import type { FalhaApi } from "@/api/cliente";
 import { EXEMPLOS, LIMITE_RESULTADOS, urlBusca } from "@/lib/busca";
 
-/** Esqueleto enquanto a busca carrega (F5-07). */
-export function Carregando() {
+/** Esqueleto enquanto a busca (ou a lista de recentes) carrega (F5-07). */
+export function Carregando({ mensagem = "Buscando acórdãos…" }: { mensagem?: string }) {
   return (
     <div className="carregando" role="status" aria-live="polite">
-      <span className="visualmente-oculto">Buscando acórdãos…</span>
+      <span className="visualmente-oculto">{mensagem}</span>
       {[0, 1, 2].map((i) => (
         <div key={i} className="cartao cartao-esqueleto" aria-hidden="true" />
       ))}
@@ -37,22 +37,47 @@ export function EstadoVazio({ filtrando }: { filtrando: boolean }) {
   );
 }
 
-function mensagemDeErro(falha: FalhaApi): string {
-  if (falha.status === 429) {
-    return "Muitas buscas em pouco tempo. Aguarde um minuto e tente de novo.";
-  }
-  if (falha.status === 422) {
-    return `A busca não pôde ser feita: ${falha.mensagem}.`;
-  }
-  return "A busca está indisponível no momento. Tente de novo em alguns minutos.";
+/** Lista de acórdãos recentes vazia: a base ainda não tem acórdãos exibíveis (F5-13). */
+export function RecentesVazio() {
+  return (
+    <section className="estado" aria-labelledby="titulo-recentes-vazio">
+      <h3 id="titulo-recentes-vazio">Nenhum acórdão disponível ainda</h3>
+      <p>Os acórdãos aparecem aqui assim que forem coletados das fontes oficiais.</p>
+    </section>
+  );
 }
 
-/** Falha da API (F5-07). */
-export function EstadoErro({ falha }: { falha: FalhaApi }) {
+type Assunto = "busca" | "recentes";
+
+function mensagemDeErro(falha: FalhaApi, assunto: Assunto): string {
+  if (falha.status === 429) {
+    return assunto === "busca"
+      ? "Muitas buscas em pouco tempo. Aguarde um minuto e tente de novo."
+      : "Muitas consultas em pouco tempo. Aguarde um minuto e recarregue a página.";
+  }
+  if (falha.status === 422 && assunto === "busca") {
+    return `A busca não pôde ser feita: ${falha.mensagem}.`;
+  }
+  return assunto === "busca"
+    ? "A busca está indisponível no momento. Tente de novo em alguns minutos."
+    : "A lista está indisponível no momento. Tente de novo em alguns minutos.";
+}
+
+/**
+ * Falha da API (F5-07). Na lista de recentes (F5-13), o título é h3, porque fica dentro da
+ * seção com título h2.
+ */
+export function EstadoErro({ falha, assunto = "busca" }: { falha: FalhaApi; assunto?: Assunto }) {
+  const Titulo = assunto === "busca" ? "h2" : "h3";
+  const tituloId = assunto === "busca" ? "titulo-erro" : "titulo-erro-recentes";
   return (
-    <section className="estado estado-erro" role="alert" aria-labelledby="titulo-erro">
-      <h2 id="titulo-erro">Não foi possível buscar</h2>
-      <p>{mensagemDeErro(falha)}</p>
+    <section className="estado estado-erro" role="alert" aria-labelledby={tituloId}>
+      <Titulo id={tituloId}>
+        {assunto === "busca"
+          ? "Não foi possível buscar"
+          : "Não foi possível carregar os acórdãos recentes"}
+      </Titulo>
+      <p>{mensagemDeErro(falha, assunto)}</p>
     </section>
   );
 }

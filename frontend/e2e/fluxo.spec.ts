@@ -79,8 +79,44 @@ test("pedido de remoção a partir do detalhe", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText("Protocolo nº");
 });
 
+test("acórdãos recentes: páginas 1 e 2 pela URL (F5-13)", async ({ page }) => {
+  // Mock: 15 acórdãos (os 3 exemplos e 12 extras), do mais recente ao mais antigo.
+  await page.goto("/");
+  const secao = page.getByRole("region", { name: "Acórdãos recentes" });
+  const cartoes = secao.getByRole("article");
+  const nav = secao.getByRole("navigation", { name: "Páginas de acórdãos recentes" });
+  await expect(cartoes).toHaveCount(10);
+  await expect(cartoes.first().getByRole("link").first()).toHaveAttribute("href", "/acordao/2");
+  await expect(nav).toContainText("Página 1 de 2");
+  await expect(nav.getByText("Anterior")).toHaveAttribute("aria-disabled", "true");
+
+  await nav.getByRole("link", { name: "Próxima" }).click();
+  await expect(page).toHaveURL(/\/\?pagina=2#acordaos-recentes$/);
+  await expect(nav).toContainText("Página 2 de 2");
+  await expect(cartoes).toHaveCount(5);
+  await expect(cartoes.first().getByRole("link").first()).toHaveAttribute("href", "/acordao/105");
+  await expect(nav.getByText("Próxima")).toHaveAttribute("aria-disabled", "true");
+
+  await nav.getByRole("link", { name: "Anterior" }).click();
+  await expect(page).toHaveURL(/\/#acordaos-recentes$/);
+  await expect(nav).toContainText("Página 1 de 2");
+  await expect(cartoes).toHaveCount(10);
+});
+
+test("acórdãos recentes vêm no HTML do servidor; página inválida vira a 1", async ({ request }) => {
+  const segunda = await request.get("/?pagina=2");
+  expect(segunda.status()).toBe(200);
+  expect(await segunda.text()).toContain("Página 2 de 2");
+  for (const pagina of ["abc", "0", "101", "3"]) {
+    const resposta = await request.get(`/?pagina=${pagina}`);
+    expect(resposta.status()).toBe(200);
+    expect(await resposta.text()).toContain("Página 1 de 2");
+  }
+});
+
 for (const caminho of [
   "/",
+  "/?pagina=2",
   "/busca?q=heran%C3%A7a",
   "/acordao/3",
   "/remocao",

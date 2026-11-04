@@ -189,6 +189,59 @@
         }
       }
     },
+    "/api/v1/acordaos/recentes": {
+      "get": {
+        "summary": "Recentes",
+        "description": "Acórdãos ativos da publicação mais recente à mais antiga, 10 por página (F5-13).\n\nData de publicação: ``data_publicacao`` (TJDFT) ou ``data_disponibilizacao`` (DJEN);\ndesempate por id decrescente. Página além da última vem com ``resultados`` vazio.",
+        "operationId": "recentes_api_v1_acordaos_recentes_get",
+        "parameters": [
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 1,
+              "title": "Pagina"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespostaRecentes"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/acordaos/{acordao_id}": {
       "get": {
         "summary": "Detalhe",
@@ -1178,6 +1231,47 @@
           "resultados"
         ],
         "title": "RespostaBusca"
+      },
+      "RespostaRecentes": {
+        "properties": {
+          "pagina": {
+            "type": "integer",
+            "title": "Pagina"
+          },
+          "por_pagina": {
+            "type": "integer",
+            "title": "Por Pagina",
+            "default": 10
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Até 1000: não há páginas além de 100"
+          },
+          "total_paginas": {
+            "type": "integer",
+            "title": "Total Paginas",
+            "description": "Até 100"
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoBusca"
+            },
+            "type": "array",
+            "title": "Resultados",
+            "description": "Mesmo item da busca; o trecho é o começo da ementa, sem destaque"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pagina",
+          "total",
+          "total_paginas",
+          "resultados"
+        ],
+        "title": "RespostaRecentes",
+        "description": "Acórdãos ativos do mais recente ao mais antigo (data de publicação; F5-13)."
       },
       "ResultadoBusca": {
         "properties": {

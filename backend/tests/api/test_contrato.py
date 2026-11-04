@@ -87,6 +87,25 @@ def test_detalhe(mock: TestClient) -> None:
     assert (ausente.status_code, ausente.json()["erro"]) == (404, "nao_encontrado")
 
 
+def test_recentes(mock: TestClient) -> None:
+    primeira = mock.get("/api/v1/acordaos/recentes").json()
+    segunda = mock.get("/api/v1/acordaos/recentes", params={"pagina": 2}).json()
+    # 21/10 (id 2), 14/10 (ids 3 e 1, desempate por id) e os extras de setembro.
+    assert [r["id"] for r in primeira["resultados"]] == [2, 3, 1, *range(112, 105, -1)]
+    assert [r["id"] for r in segunda["resultados"]] == list(range(105, 100, -1))
+    for numero, corpo in enumerate((primeira, segunda), start=1):
+        assert (corpo["pagina"], corpo["por_pagina"]) == (numero, 10)
+        assert (corpo["total"], corpo["total_paginas"]) == (15, 2)
+    assert "<mark>" not in primeira["resultados"][0]["trecho"]
+    assert mock.get("/api/v1/acordaos/recentes", params={"pagina": 3}).json()["resultados"] == []
+    for pagina in (0, 101):
+        resposta = mock.get("/api/v1/acordaos/recentes", params={"pagina": pagina})
+        assert resposta.status_code == 422
+    # Os extras abrem no detalhe, mas não entram na busca.
+    assert mock.get("/api/v1/acordaos/105").json()["ementa"].startswith("EMENTA SINTÉTICA")
+    assert mock.get("/api/v1/busca", params={"q": "sintética"}).json()["total"] == 0
+
+
 def test_processo(mock: TestClient) -> None:
     numero = EXEMPLOS[1].detalhe.numero_processo
     for forma in (numero, "".join(c for c in numero if c.isdigit())):

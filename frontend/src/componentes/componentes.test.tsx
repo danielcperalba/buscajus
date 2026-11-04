@@ -8,6 +8,8 @@ import { CopiarCitacao } from "@/componentes/CopiarCitacao";
 import { AvisoLimite, Carregando, EstadoErro, EstadoVazio } from "@/componentes/Estados";
 import { Filtros } from "@/componentes/Filtros";
 import { Paginacao } from "@/componentes/Paginacao";
+import { PaginacaoRecentes } from "@/componentes/PaginacaoRecentes";
+import { ListaRecentes } from "@/componentes/Recentes";
 import { lerEstado } from "@/lib/busca";
 import { RESULTADO_DJEN, RESULTADO_TJDFT } from "@/testes/dados";
 
@@ -161,6 +163,99 @@ describe("Paginação e estados (F5-07)", () => {
   it("carregando é anunciado", () => {
     render(<Carregando />);
     expect(screen.getByRole("status")).toHaveTextContent("Buscando acórdãos");
+  });
+});
+
+describe("Acórdãos recentes (F5-13)", () => {
+  function navegacao(): HTMLElement {
+    return screen.getByRole("navigation", { name: "Páginas de acórdãos recentes" });
+  }
+
+  it("primeira página: Anterior desabilitado e Próxima para a página 2", () => {
+    render(<PaginacaoRecentes pagina={1} totalPaginas={3} />);
+    const nav = navegacao();
+    expect(nav).toHaveTextContent("Página 1 de 3");
+    expect(within(nav).queryByRole("link", { name: "Anterior" })).toBeNull();
+    expect(within(nav).getByText("Anterior")).toHaveAttribute("aria-disabled", "true");
+    expect(within(nav).getByRole("link", { name: "Próxima" })).toHaveAttribute(
+      "href",
+      "/?pagina=2#acordaos-recentes",
+    );
+  });
+
+  it("página do meio: os dois links, sem lista de números", () => {
+    render(<PaginacaoRecentes pagina={2} totalPaginas={3} />);
+    const nav = navegacao();
+    expect(nav).toHaveTextContent("Página 2 de 3");
+    expect(within(nav).getByRole("link", { name: "Anterior" })).toHaveAttribute(
+      "href",
+      "/#acordaos-recentes",
+    );
+    expect(within(nav).getByRole("link", { name: "Próxima" })).toHaveAttribute(
+      "href",
+      "/?pagina=3#acordaos-recentes",
+    );
+    expect(within(nav).getAllByRole("link")).toHaveLength(2);
+    expect(nav.querySelector("[aria-disabled]")).toBeNull();
+  });
+
+  it("última página: Próxima desabilitado", () => {
+    render(<PaginacaoRecentes pagina={3} totalPaginas={3} />);
+    const nav = navegacao();
+    expect(within(nav).getByRole("link", { name: "Anterior" })).toHaveAttribute(
+      "href",
+      "/?pagina=2#acordaos-recentes",
+    );
+    expect(within(nav).queryByRole("link", { name: "Próxima" })).toBeNull();
+    expect(within(nav).getByText("Próxima")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("sem paginação para uma página só", () => {
+    const { container } = render(<PaginacaoRecentes pagina={1} totalPaginas={1} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("lista os cartões com título h3 e a paginação", () => {
+    render(
+      <ListaRecentes
+        resposta={{
+          dados: {
+            pagina: 1,
+            por_pagina: 10,
+            total: 12,
+            total_paginas: 2,
+            resultados: [RESULTADO_TJDFT, RESULTADO_DJEN],
+          },
+        }}
+      />,
+    );
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      RESULTADO_TJDFT.numero_processo,
+      RESULTADO_DJEN.numero_processo,
+    ]);
+    expect(navegacao()).toHaveTextContent("Página 1 de 2");
+  });
+
+  it("lista vazia e erro da API", () => {
+    const vazia = { pagina: 1, por_pagina: 10, total: 0, total_paginas: 0, resultados: [] };
+    const { rerender } = render(<ListaRecentes resposta={{ dados: vazia }} />);
+    expect(
+      screen.getByRole("heading", { name: "Nenhum acórdão disponível ainda" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    rerender(
+      <ListaRecentes resposta={{ falha: { status: 0, erro: "indisponivel", mensagem: "x" } }} />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Não foi possível carregar os acórdãos recentes",
+    );
+    rerender(
+      <ListaRecentes
+        resposta={{ falha: { status: 429, erro: "limite_excedido", mensagem: "x" } }}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("recarregue a página");
   });
 });
 

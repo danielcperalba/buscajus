@@ -4,7 +4,8 @@ import type { ResultadoBusca } from "@/api/cliente";
 import { CopiarCitacao } from "@/componentes/CopiarCitacao";
 import { formatarData, trechoSeguro } from "@/lib/busca";
 
-type Props = { resultado: ResultadoBusca };
+// h3 quando a lista fica dentro de uma seção com título h2 (acórdãos recentes, F5-13).
+type Props = { resultado: ResultadoBusca; nivelTitulo?: 2 | 3 };
 
 function relatorExibido(resultado: ResultadoBusca): string | undefined {
   if (resultado.relator_designado) {
@@ -14,7 +15,8 @@ function relatorExibido(resultado: ResultadoBusca): string | undefined {
 }
 
 /** Cartão de um acórdão na lista de resultados (F5-04). */
-export function CartaoResultado({ resultado }: Props) {
+export function CartaoResultado({ resultado, nivelTitulo = 2 }: Props) {
+  const Titulo = nivelTitulo === 3 ? "h3" : "h2";
   const datas = [
     ["Julgado em", formatarData(resultado.data_julgamento)],
     ["Publicado em", formatarData(resultado.data_publicacao)],
@@ -31,9 +33,9 @@ export function CartaoResultado({ resultado }: Props) {
 
   return (
     <article className="cartao" aria-labelledby={tituloId}>
-      <h2 id={tituloId} className="cartao-numero">
+      <Titulo id={tituloId} className="cartao-numero">
         <Link href={`/acordao/${resultado.id}`}>{resultado.numero_processo}</Link>
-      </h2>
+      </Titulo>
       <dl className="cartao-metadados">
         {metadados.map(([rotulo, valor]) => (
           <div key={rotulo}>

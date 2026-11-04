@@ -19,6 +19,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    RespostaRecentes,
     SituacaoAcordao,
 )
 
@@ -40,6 +41,10 @@ class ServicoBusca(Protocol):
     def buscar(
         self, consulta: ConsultaAnalisada, filtros: FiltrosBusca, pagina: int
     ) -> RespostaBusca: ...
+
+    def recentes(self, pagina: int) -> RespostaRecentes:
+        """Só ``ativo``, da publicação mais recente à mais antiga; desempate por id (F5-13)."""
+        ...
 
     def detalhe(self, acordao_id: int) -> DetalheAcordao | Indisponivel | None: ...
 

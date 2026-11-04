@@ -292,7 +292,11 @@ def test_limite_de_taxa_por_ip_e_por_tipo(banco: Engine, ids: dict[str, int]) ->
         # Cacheadas e sem entrada do usuário: fora do limite.
         assert cliente.get("/api/v1/filtros").status_code == 200
         assert cliente.get("/api/v1/cobertura").status_code == 200
-        for rota in ("/api/v1/busca?q=herança", "/api/v1/relatores?prefixo=de tal"):
+        for rota in (
+            "/api/v1/busca?q=herança",
+            "/api/v1/relatores?prefixo=de tal",
+            "/api/v1/acordaos/recentes",
+        ):
             assert cliente.get(rota).status_code == 429
 
 

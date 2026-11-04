@@ -409,6 +409,8 @@ CREATE INDEX acordao_filtros_idx    ON acordao (tribunal, data_referencia DESC) 
 CREATE INDEX acordao_classe_idx     ON acordao (classe_codigo_cnj);
 CREATE INDEX acordao_orgao_idx      ON acordao (tribunal, orgao_julgador);
 CREATE INDEX acordao_relator_trgm   ON acordao USING gin (relator_chave gin_trgm_ops);
+CREATE INDEX acordao_recentes_idx   ON acordao ((coalesce(data_publicacao, data_disponibilizacao)) DESC NULLS LAST, id DESC)
+    WHERE situacao = 'ativo';                -- acórdãos recentes (F5-13; migração 0008)
 ```
 
 Notas:
@@ -831,6 +833,7 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 | Método | Rota | Descrição |
 |---|---|---|
 | `GET` | `/busca?q=&tribunal=&orgao=&classe=&relator=&data_inicio=&data_fim=&pagina=` | Busca híbrida (ou exata, se `q` for número) |
+| `GET` | `/acordaos/recentes?pagina=` | Acórdãos ativos do mais recente ao mais antigo (página inicial) |
 | `GET` | `/acordaos/{id}` | Detalhe (410 se cancelado/removido) |
 | `GET` | `/processos/{numero}` | Acórdãos de um processo (com ou sem máscara) |
 | `GET` | `/filtros` | Valores de tribunal, órgão e classe para os filtros |
@@ -844,8 +847,9 @@ Prefixo `/api/v1`. JSON. Sem autenticação no MVP; rate limit por IP para evita
 - Erros têm corpo `{"erro": "<código estável>", "mensagem": "..."}` (404 `nao_encontrado`; 422 `consulta_vazia`, `periodo_invalido`, `numero_invalido`, `referencia_invalida`; 429 `limite_excedido`, com `Retry-After`); 410 traz `{"erro": "cancelado" | "removido", "mensagem", "link_oficial"}`. Erros de validação de parâmetros seguem o 422 padrão do FastAPI.
 - `/busca` devolve `consulta` (normalizada), `tipo` (`hibrida` ou `processo`), `numero_processo` detectado, `filtros`, `pagina` (1 a 10), `por_pagina` (20), `total` (até 200) e `resultados`. O `trecho` é a ementa escapada, e o único HTML possível é `<mark>`.
 - O serviço real é `busca.servico.ServicoPostgres` (seção 8.8). Com `api.mock = true`, um serviço com dados sintéticos fixos responde no formato do contrato, para o frontend trabalhar sem banco.
-- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, detalhe, processo e relatores, e `api.remocoes_por_hora` (5) para a remoção. `/filtros` e `/cobertura` ficam fora do limite: não recebem entrada do usuário e têm cache (`busca.cache_filtros_segundos`, 300 s), então não custam consultas ao banco; antes, cada página `/busca` (que chama `/filtros` e `/busca`) gastava duas unidades e o limite efetivo caía a 30 buscas por minuto. `/saude` e `/acordaos/{id}/situacao` também ficam fora. A contagem é por processo da API; com vários processos, cada um conta o seu. No máximo `api.max_ips_limitador` (100 mil) IPs são acompanhados; acima disso, os menos recentes são descartados.
+- Limite de taxa por IP (F4-13), em janela deslizante em memória: `api.consultas_por_minuto` (60) para busca, recentes, detalhe, processo e relatores, e `api.remocoes_por_hora` (5) para a remoção. `/filtros` e `/cobertura` ficam fora do limite: não recebem entrada do usuário e têm cache (`busca.cache_filtros_segundos`, 300 s), então não custam consultas ao banco; antes, cada página `/busca` (que chama `/filtros` e `/busca`) gastava duas unidades e o limite efetivo caía a 30 buscas por minuto. `/saude` e `/acordaos/{id}/situacao` também ficam fora. A contagem é por processo da API; com vários processos, cada um conta o seu. No máximo `api.max_ips_limitador` (100 mil) IPs são acompanhados; acima disso, os menos recentes são descartados.
 - **IP do cliente**: com `api.proxies_confiaveis = N > 0`, é o N-ésimo item **a partir da direita** do `X-Forwarded-For` (o que os nossos proxies acrescentaram); os itens à esquerda vêm do cliente e podem ser falsificados. Com 0, ou com o cabeçalho ausente, curto ou malformado, vale o IP da conexão. Requisito de implantação na seção 12.2.
+- `GET /acordaos/recentes?pagina=N` (F5-13): só `ativo`, da data de publicação mais recente à mais antiga, com a mesma data dos resultados (`data_publicacao` no TJDFT, `data_disponibilizacao` no DJEN; sem nenhuma das duas, no fim) e desempate por `id` decrescente, para a paginação ficar estável. Páginas de 10, de 1 a 100 (422 fora disso); página além da última vem com `resultados` vazio. Itens no formato do resultado da busca, com o começo da ementa como trecho, sem `<mark>`; mais `pagina`, `por_pagina`, `total` e `total_paginas`. O `total` é contado só até 1.000 (100 páginas de 10): contar todos os ativos a cada visita à página inicial percorreria o índice inteiro. O índice parcial `acordao_recentes_idx` (seção 4.2) serve a ordenação sem varrer nem ordenar a tabela; a expressão da consulta (`ORDEM_RECENTES`, em `busca.servico`) tem de ser idêntica à dele, e um teste confere o plano. Fica sob o limite de consultas. O mock tem 12 acórdãos sintéticos a mais, só nessa lista e no detalhe, para haver duas páginas.
 - `GET /acordaos/{id}/situacao` devolve só a situação (`ativo`, `cancelado`, `removido`; 404 para o resto), sem o texto e fora do limite de taxa: o site a usa para responder 404/410 antes de renderizar.
 
 Item de resultado:
@@ -874,7 +878,7 @@ Item de resultado:
 
 ## 11. Frontend
 
-- **Página inicial / busca** (`/`, `/busca?q=`): campo único em destaque; exemplos de consulta; filtros recolhíveis.
+- **Página inicial / busca** (`/`, `/busca?q=`): campo único em destaque; exemplos de consulta; filtros recolhíveis. Abaixo dos exemplos, a lista de acórdãos recentes (seção 11.3).
 - **Resultados**: cartão com número do processo em destaque, tribunal, órgão, classe, relator, datas, trecho com destaque, botão **Copiar citação**, link **Ver na fonte oficial** (certidão do DJEN ou documento do TJDFT), link secundário **Ver no sistema do tribunal** quando houver `link_tribunal`, e o aviso de reprodução.
 - **Detalhe** (`/acordao/[id]`, SSR): ementa completa, dispositivo (TJDFT), metadados, citação, links oficiais, aviso e link "Solicitar remoção".
 - **Processo** (`/processo/[numero]`): todos os acórdãos do processo.
@@ -899,6 +903,12 @@ Item de resultado:
 - **Remoção** (`/remocao`): server action que chama `POST /api/v1/remocao` no servidor; funciona sem JavaScript. `?referencia=` vem preenchido a partir do detalhe. O e-mail de contato do projeto aparece como texto quando `CONTATO_EMAIL` está configurado no `web`.
 - **Institucionais**: `/sobre` e `/privacidade` são rascunhos pendentes de revisão (F5-10); a cobertura por tribunal e período passa a vir da base no F7-04.
 - **Acessibilidade**: axe-core nos testes (sem violações sérias ou críticas nas páginas e componentes síncronos); o contraste vem dos tokens de cor, porque o jsdom não o mede.
+
+### 11.3 Acórdãos recentes na página inicial (F5-13)
+
+- Seção "Acórdãos recentes" abaixo do formulário e dos exemplos, com 10 `CartaoResultado` (título h3, dentro da seção de título h2). Renderizada no servidor: a página é um prerender parcial, e a lista, que lê `?pagina=`, fica num `Suspense`, como na busca. Funciona sem JavaScript.
+- Paginação pela URL (`/?pagina=N`; a primeira é `/`), com a âncora `#acordaos-recentes` para voltar à lista: "Anterior", "Página X de Y" e "Próxima", sem lista de números. Na primeira e na última página o botão vira texto com `aria-disabled`.
+- Página inválida, fora de 1 a 100 ou além da última → página 1, sem erro. Lista vazia e erro da API usam `Estados.tsx` (`RecentesVazio` e `EstadoErro` com `assunto="recentes"`).
 
 ---
 
