@@ -8,6 +8,7 @@ na configuração a partir de ``BUSCAJUS_TEST_DIRETORIO_MODELOS`` (preenchido po
 import importlib.util
 import os
 import re
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -18,8 +19,10 @@ from buscajus.core.config import ConfigAnonimizacao
 from buscajus.ingest.anonimizacao import Rejeicao
 from buscajus.ingest.anonimizacao.modelo_ner import (
     Palavra,
+    baixar_modelo,
     carregar_detector,
     juntar_palavras,
+    limpar_travas_orfas,
     variante_caixa,
     versao_detector,
 )
@@ -86,6 +89,35 @@ def test_pesos_ausentes_falham_fechado_sem_baixar(
     with pytest.raises(ErroAnonimizacao, match="NER"):
         carregar_detector(ConfigAnonimizacao(), tmp_path)
     assert not any((tmp_path / "ner").rglob("*.safetensors"))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock: o download roda no worker (Linux)")
+def test_travas_orfas_do_download_sao_apagadas(tmp_path: Path) -> None:
+    import fcntl
+
+    pasta = tmp_path / ".locks" / "models--Exemplo--modelo"
+    pasta.mkdir(parents=True)
+    orfa, em_uso = pasta / "a.lock", pasta / "b.lock"
+    orfa.touch()
+    em_uso.touch()
+    with em_uso.open("r+") as segurada:
+        fcntl.flock(segurada, fcntl.LOCK_EX)
+        assert limpar_travas_orfas(tmp_path) == 1
+    assert not orfa.exists() and em_uso.exists()
+    assert limpar_travas_orfas(tmp_path) == 1
+    assert limpar_travas_orfas(tmp_path / "vazio") == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permissões POSIX")
+def test_volume_sem_permissao_tem_mensagem_clara(tmp_path: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root ignora as permissões")
+    tmp_path.chmod(0o500)
+    try:
+        with pytest.raises(ErroAnonimizacao, match="chown"):
+            baixar_modelo(ConfigAnonimizacao(), tmp_path)
+    finally:
+        tmp_path.chmod(0o700)
 
 
 def test_versao_do_detector_identifica_modelo_revisao_e_limiar() -> None:

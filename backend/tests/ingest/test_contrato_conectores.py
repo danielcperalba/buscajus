@@ -131,8 +131,80 @@ def test_zip_malformado_vira_erro_seguro(
 def test_entrada_grande_demais(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(caderno, "LIMITE_BYTES_ENTRADA", 10)
     arquivo = _zip(tmp_path / "c.zip", {"TJPR-1.json": _pagina({"id": 1})})
-    with pytest.raises(ErroColeta, match="maior que o limite"):
+    with pytest.raises(ErroColeta, match="maior que o limite") as erro:
         list(caderno.ler_comunicacoes(arquivo))
+    # Nome fora do formato esperado não entra no diagnóstico.
+    assert "TJPR-1" not in str(erro.value) and "nome fora do padrão" in str(erro.value)
+
+
+def test_entrada_grande_tem_diagnostico_com_nome_e_tamanho(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    nome = "TJPR-D-2099-10-29_17.json"
+    pagina = _pagina(*({"id": i, "texto": "x" * 50} for i in range(20)))
+    arquivo = _zip(tmp_path / "c.zip", {nome: pagina})
+    # Acima do alerta: processa normalmente e registra só nome e tamanho.
+    monkeypatch.setattr(caderno, "ALERTA_BYTES_ENTRADA", 100)
+    with caplog.at_level("WARNING", logger=caderno.__name__):
+        assert len(list(caderno.ler_comunicacoes(arquivo))) == 20
+    registro = next(r for r in caplog.records if r.getMessage() == "entrada grande no caderno")
+    assert registro.entrada == nome and registro.bytes == len(pagina)  # type: ignore[attr-defined]
+    assert "xxxx" not in caplog.text
+    # Acima do limite: erro com nome e tamanho, sem conteúdo.
+    monkeypatch.setattr(caderno, "LIMITE_BYTES_ENTRADA", 100)
+    with pytest.raises(ErroColeta, match="maior que o limite") as erro:
+        list(caderno.ler_comunicacoes(arquivo))
+    assert nome in str(erro.value) and "descompactado" in str(erro.value)
+
+
+def test_leitura_em_streaming_com_blocos_pequenos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Itens cortados em qualquer ponto do bloco (números, escapes, acentos) saem inteiros."""
+    monkeypatch.setattr(caderno, "BLOCO_LEITURA", 7)
+    itens = [
+        {"id": 123456789, "valor": -1.5e3, "nulo": None, "ok": True},
+        {"id": 2, "texto": 'Ementa de Acórdão "aspas" \\ barra', "lista": [1, [2, {}]]},
+        {"id": 3, "tipoDocumento": "Ementa de Acórdão", "texto": "ç" * 40},
+        {},
+    ]
+    corpo = json.dumps({"items": itens, "count": len(itens)}, indent=2).encode()
+    arquivo = _zip(tmp_path / "c.zip", {"TJPR-1.json": b"\xef\xbb\xbf" + corpo})
+    assert list(caderno.ler_comunicacoes(arquivo)) == itens
+
+    vazia = _zip(tmp_path / "v.zip", {"TJPR-1.json": b'{"count": 0, "items": []}'})
+    assert list(caderno.ler_comunicacoes(vazia)) == []
+
+
+@pytest.mark.parametrize(
+    ("conteudo", "mensagem"),
+    [
+        (b'{"count": 1, "items": [{"id": 1}]} lixo', "JSON inválida"),
+        (b'{"count": 1, "items": [{"id": 1} {"id": 2}]}', "JSON inválida"),
+        (b'{"count": 1, "items": [{"id": 1}', "JSON inválida"),
+        (b'{"items": null}', "sem a lista items"),
+        (b'{"count": 1 "items": []}', "JSON inválida"),
+        (b'{"count": 1, "items": ["\xff"]}', "JSON inválida"),
+    ],
+)
+def test_streaming_rejeita_json_malformado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, conteudo: bytes, mensagem: str
+) -> None:
+    monkeypatch.setattr(caderno, "BLOCO_LEITURA", 5)
+    arquivo = _zip(tmp_path / "c.zip", {"TJPR-1.json": conteudo})
+    with pytest.raises(ErroColeta, match=mensagem):
+        list(caderno.ler_comunicacoes(arquivo))
+
+
+def test_comunicacao_grande_demais(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(caderno, "BLOCO_LEITURA", 16)
+    monkeypatch.setattr(caderno, "LIMITE_CARACTERES_ITEM", 200)
+    pequena = {"id": 1, "texto": "x" * 50}
+    arquivo = _zip(tmp_path / "c.zip", {"TJPR-1.json": _pagina(pequena, {"texto": "x" * 1000})})
+    lidas: list[dict[str, Any]] = []
+    with pytest.raises(ErroColeta, match="comunicação maior que o limite"):
+        lidas.extend(caderno.ler_comunicacoes(arquivo))
+    assert lidas == [pequena]
 
 
 def test_arquivo_que_nao_e_zip(tmp_path: Path) -> None:

@@ -14,12 +14,14 @@ Os comandos têm duas metades:
 A carga (F1-43) é **ponto de parada**: só roda com a aprovação do dono do projeto.
 """
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -151,6 +153,8 @@ class Volumes:
     falhas_parser: dict[str, int] = field(default_factory=dict)
     descartados_segredo: int = 0
     erros: dict[str, int] = field(default_factory=dict)
+    # Dias deixados em andamento por uma carga anterior que morreu no meio, refeitos agora.
+    retomados: dict[str, int] = field(default_factory=dict)
 
     def somar(self, fonte: str, resumo: ResumoUnidade) -> None:
         c = resumo.contadores
@@ -192,53 +196,113 @@ def carregar_dias(
     return com_dados, resumos
 
 
+# Chave do advisory lock do Postgres que impede duas cargas piloto ao mesmo tempo (por exemplo,
+# um contêiner que continuou rodando depois que o cliente do Docker o perdeu).
+CHAVE_TRAVA_CARGA = 0x42_4A_50_31  # "BJP1"
+
+
+@contextmanager
+def trava_da_carga(engine: Engine) -> Iterator[None]:
+    """Uma carga piloto por vez; a trava cai sozinha se o processo ou a conexão morrerem."""
+    # AUTOCOMMIT: a trava é da sessão; a conexão não fica com uma transação aberta na carga.
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conexao:
+        if not conexao.scalar(
+            text("SELECT pg_try_advisory_lock(:chave)"), {"chave": CHAVE_TRAVA_CARGA}
+        ):
+            raise ErroPiloto(
+                "outra carga piloto está em andamento neste banco; espere ela terminar ou pare "
+                "o contêiner dela (docker compose ps -a)"
+            )
+        try:
+            yield
+        finally:
+            conexao.execute(text("SELECT pg_advisory_unlock(:chave)"), {"chave": CHAVE_TRAVA_CARGA})
+
+
+def unidades_interrompidas(engine: Engine) -> dict[str, list[date]]:
+    """Dias que ficaram ``em_andamento`` numa carga que morreu no meio (mais recente primeiro).
+
+    Com a trava da carga, nenhuma outra carga está rodando: o que está em andamento foi
+    interrompido (contêiner morto, suspensão da máquina).
+    """
+    with engine.connect() as conexao:
+        djen = conexao.scalars(
+            text("""
+                SELECT data FROM caderno_djen
+                WHERE tribunal = 'TJPR' AND status = 'em_andamento' ORDER BY data DESC
+            """)
+        ).all()
+        tjdft = conexao.scalars(
+            text("""
+                SELECT data_inicio FROM coleta_janela
+                WHERE fonte = 'tjdft' AND status = 'em_andamento' AND data_inicio = data_fim
+                ORDER BY data_inicio DESC
+            """)
+        ).all()
+    return {"djen": list(djen), "tjdft": list(tjdft)}
+
+
+def ordenar_candidatos(interrompidos: Sequence[date], janela: Sequence[date]) -> list[date]:
+    """Os dias interrompidos vêm primeiro (são refeitos do zero), depois os da janela."""
+    vistos = set(interrompidos)
+    return [*interrompidos, *(d for d in janela if d not in vistos)]
+
+
 def executar_carga(
     config: Config, engine: Engine, *, hoje: date, dias_uteis: int = DIAS_UTEIS
 ) -> Volumes:
-    """Carga piloto: ``dias_uteis`` cadernos do TJPR (DJEN) e dias do TJDFT, no banco local."""
+    """Carga piloto: ``dias_uteis`` cadernos do TJPR (DJEN) e dias do TJDFT, no banco local.
+
+    Dias que uma carga anterior deixou ``em_andamento`` são refeitos primeiro (``forcar``
+    recomeça a unidade do zero) e contam entre os ``dias_uteis``.
+    """
     from buscajus.ingest.djen import fabrica as fabrica_djen
     from buscajus.ingest.tjdft import fabrica as fabrica_tjdft
 
     conferir_conteiner(config)
     detector = carregar_detector(config.anonimizacao, config.diretorio_modelos)
     volumes = Volumes()
-    candidatos = dias_uteis_anteriores(hoje)
+    janela = dias_uteis_anteriores(hoje)
 
-    anon_djen = criar_anonimizador(detector)
-    coleta = fabrica_djen.criar_coleta(config, engine, anonimizador=anon_djen, tribunal="TJPR")
-    try:
-        dias, resumos = carregar_dias(
-            lambda d: coleta.conector.planejar("TJPR", d, d)[0],
-            lambda u: coleta.orquestrador.executar([u], forcar=True)[0],
-            candidatos,
-            dias_uteis,
-            lambda r: r.resultado == Resultado.CONCLUIDA,
-        )
-    finally:
-        coleta.fechar()
-    volumes.dias["djen"] = dias
-    for resumo in resumos:
-        volumes.somar("djen", resumo)
-    volumes.substituicoes["djen"] = dict(anon_djen.substituicoes)
+    with trava_da_carga(engine):
+        interrompidas = unidades_interrompidas(engine)
+        volumes.retomados = {f: len(d) for f, d in interrompidas.items()}
 
-    anon_tjdft = criar_anonimizador_tjdft(detector)
-    coleta_tjdft = fabrica_tjdft.criar_coleta(config, engine, anonimizador=anon_tjdft)
-    try:
-        dias, resumos = carregar_dias(
-            lambda d: coleta_tjdft.conector.planejar("TJDFT", d, d)[0],
-            lambda u: coleta_tjdft.orquestrador.executar([u], forcar=True)[0],
-            candidatos,
-            dias_uteis,
-            lambda r: r.resultado == Resultado.CONCLUIDA and r.contadores.recebidos > 0,
-        )
-    finally:
-        coleta_tjdft.fechar()
-    volumes.dias["tjdft"] = dias
-    for resumo in resumos:
-        volumes.somar("tjdft", resumo)
-    volumes.substituicoes["tjdft"] = {
-        c: v for c, v in anon_tjdft.substituicoes.items() if c != "camada1"
-    }
+        anon_djen = criar_anonimizador(detector)
+        coleta = fabrica_djen.criar_coleta(config, engine, anonimizador=anon_djen, tribunal="TJPR")
+        try:
+            dias, resumos = carregar_dias(
+                lambda d: coleta.conector.planejar("TJPR", d, d)[0],
+                lambda u: coleta.orquestrador.executar([u], forcar=True)[0],
+                ordenar_candidatos(interrompidas["djen"], janela),
+                dias_uteis,
+                lambda r: r.resultado == Resultado.CONCLUIDA,
+            )
+        finally:
+            coleta.fechar()
+        volumes.dias["djen"] = dias
+        for resumo in resumos:
+            volumes.somar("djen", resumo)
+        volumes.substituicoes["djen"] = dict(anon_djen.substituicoes)
+
+        anon_tjdft = criar_anonimizador_tjdft(detector)
+        coleta_tjdft = fabrica_tjdft.criar_coleta(config, engine, anonimizador=anon_tjdft)
+        try:
+            dias, resumos = carregar_dias(
+                lambda d: coleta_tjdft.conector.planejar("TJDFT", d, d)[0],
+                lambda u: coleta_tjdft.orquestrador.executar([u], forcar=True)[0],
+                ordenar_candidatos(interrompidas["tjdft"], janela),
+                dias_uteis,
+                lambda r: r.resultado == Resultado.CONCLUIDA and r.contadores.recebidos > 0,
+            )
+        finally:
+            coleta_tjdft.fechar()
+        volumes.dias["tjdft"] = dias
+        for resumo in resumos:
+            volumes.somar("tjdft", resumo)
+        volumes.substituicoes["tjdft"] = {
+            c: v for c, v in anon_tjdft.substituicoes.items() if c != "camada1"
+        }
     return volumes
 
 
@@ -327,7 +391,13 @@ def comando_worker(*argumentos: str) -> list[str]:
 
 
 def chamar_worker(raiz: Path, argumentos: Sequence[str]) -> tuple[int, str]:
-    """Roda o subcomando no worker; os logs (stderr) passam direto, o stdout é devolvido."""
+    """Roda o subcomando no worker; os logs (stderr) passam direto, o stdout é devolvido.
+
+    O subcomando termina sempre imprimindo um resumo JSON. Sem ele, a execução não chegou ao
+    fim, qualquer que seja o código de saída: o cliente do Docker pode sair com 0 quando perde
+    o contêiner (ex.: "error waiting for container: unexpected EOF" depois de uma suspensão
+    do Windows).
+    """
     processo = subprocess.run(  # noqa: S603
         comando_worker(*argumentos),
         cwd=raiz,
@@ -336,7 +406,21 @@ def chamar_worker(raiz: Path, argumentos: Sequence[str]) -> tuple[int, str]:
         encoding="utf-8",
         check=False,
     )
+    if not _tem_resumo(processo.stdout):
+        raise ErroPiloto(
+            f"o worker não terminou `{argumentos[0]}` (código de saída {processo.returncode}, "
+            "sem o resumo final): o contêiner pode ter morrido no meio, por exemplo numa "
+            "suspensão do Windows. Confira com `docker compose ps -a` se não sobrou contêiner "
+            "do worker rodando e rode o comando de novo; a carga refaz os dias interrompidos."
+        )
     return processo.returncode, processo.stdout
+
+
+def _tem_resumo(saida: str) -> bool:
+    try:
+        return isinstance(json.loads(saida), dict)
+    except ValueError:
+        return False
 
 
 def volumes_dict(volumes: Volumes) -> dict[str, Any]:
@@ -350,5 +434,6 @@ def volumes_dict(volumes: Volumes) -> dict[str, Any]:
         "falhas_parser": volumes.falhas_parser,
         "descartados_segredo_tjdft": volumes.descartados_segredo,
         "unidades_com_erro": volumes.erros,
+        "unidades_interrompidas_refeitas": volumes.retomados,
         "camadas": list(CAMADAS),
     }

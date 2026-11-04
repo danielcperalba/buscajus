@@ -62,9 +62,32 @@ def test_metricas(avaliacao: ModuleType) -> None:
     total = placares["total"]
     assert total.vazados == 0 and total.manter_preservados == total.manter
     assert total.previstas == total.previstas_corretas == total.anonimizar
+    assert total.substituicoes_indevidas == 0 and total.nao_sensiveis_substituidos == 0
+    assert total.nao_sensiveis > 0
     placares, _ = avaliacao.avaliar(_detector_perfeito(avaliacao, perder=3))
     assert placares["total"].vazados == 3
     assert placares["total"].linha()["vazados"] == "3"
+
+
+def test_excesso_de_anonimizacao(avaliacao: ModuleType) -> None:
+    texto, marcas = avaliacao.ler_marcacao(
+        "Apelação. A vítima [[Clotilde Ravanello]] depôs. Relator {{Des. Fulano Tal}}."
+    )
+    nome = next(m for m in marcas if m.anonimizar)
+    inicio = texto.index("Apelação")
+    relator = texto.index("Fulano Tal")
+    previstas = [
+        Entidade(nome.inicio, nome.fim),
+        Entidade(inicio, inicio + len("Apelação")),
+        Entidade(relator, relator + len("Fulano Tal")),
+    ]
+    placar = avaliacao.Placar()
+    placar.somar(texto, marcas, previstas)
+    assert placar.vazados == 0
+    assert placar.substituicoes_indevidas == 2
+    # "Apelação" e o relator ("Fulano", "Tal") entre os tokens que não são do nome.
+    assert placar.nao_sensiveis_substituidos == 3
+    assert placar.linha()["excesso (tokens não sensíveis)"].startswith(f"3/{placar.nao_sensiveis} ")
 
 
 def test_scripts_da_anotacao_manual_foram_removidos() -> None:

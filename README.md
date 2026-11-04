@@ -108,16 +108,19 @@ docker compose run --rm worker buscajus modelos baixar-ner   # uma vez: pesos do
 cd backend
 # 1. Carga: 5 dias úteis recentes do TJPR (DJEN) e 5 do TJDFT, sempre pelo worker do compose.
 #    Recusa se o repositório ou a pasta da revisão estiverem no OneDrive, Dropbox, Google Drive…
+#    Se o worker morrer no meio (ex.: suspensão do Windows), o comando sai com erro; rode-o de
+#    novo: os dias que ficaram em andamento são refeitos primeiro.
 uv run buscajus piloto carregar [--dias-uteis 5]
 
 # 2. Revisão: sorteia 100 ementas já anonimizadas para ner-avaliacao-privado/ e mostra uma por
-#    vez; responda ok ou vazou (e digite o trecho que escapou). Dá para sair e continuar depois.
-#    "Vazou" põe o acórdão em quarentena na hora.
+#    vez; responda ok, anonimizou demais (algo não sensível virou iniciais ou máscara) ou vazou
+#    (e digite o trecho que escapou). Dá para sair e continuar depois. "Vazou" põe o acórdão em
+#    quarentena na hora; "anonimizou demais" só é contado.
 uv run buscajus revisao amostrar --n 100
 uv run buscajus revisao revisar
 
-# 3. Resultado: só agregados (revisadas, vazamentos, taxa, limite superior de 95%), gravados
-#    em docs/revisao-anonimizacao.md.
+# 3. Resultado: só agregados (revisadas, vazamentos, taxa, limite superior de 95% e quantas
+#    anonimizaram demais), gravados em docs/revisao-anonimizacao.md.
 uv run buscajus revisao resultado
 
 # Com vazamento: corrija as regras e confira se elas pegam os trechos marcados (só contagens);

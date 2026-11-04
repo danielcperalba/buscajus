@@ -7,6 +7,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH"
 
+# Hugging Face: o usuário da imagem não tem home, e o HF_HOME padrão (~/.cache) não é
+# gravável; o xet gravava o cache dele ali e falhava com "Permission denied (os error 13)".
+# HF_HOME vai para uma pasta do usuário da imagem; os pesos vão para o volume pelo cache_dir
+# (modelo_ner.baixar_modelo); o xet fica desligado (download HTTP simples, sem um segundo
+# cache de blocos do mesmo modelo).
+ENV HF_HOME=/dados/hf \
+    HF_HUB_DISABLE_XET=1
+
 COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /usr/local/bin/uv
 
 WORKDIR /app
@@ -22,7 +30,7 @@ COPY src ./src
 RUN uv sync --frozen --no-dev --group ner
 
 RUN useradd --system --uid 10001 --no-create-home buscajus \
-    && mkdir -p /dados/raw /dados/modelos \
+    && mkdir -p /dados/raw /dados/modelos /dados/hf \
     && chown -R buscajus /dados
 USER buscajus
 
