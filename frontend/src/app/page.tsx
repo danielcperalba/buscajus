@@ -14,11 +14,14 @@ import { ANCORA_RECENTES } from "@/lib/recentes";
 export default function Inicio({ searchParams }: PageProps<"/">) {
   return (
     <div className="inicio">
-      <h1>Jurisprudência por contexto</h1>
-      <p className="subtitulo">
-        Descreva a situação e encontre acórdãos relevantes, com o número do processo e a citação
-        pronta. Os textos vêm de fontes oficiais.
-      </p>
+      <header className="cabeca-artigo">
+        <p className="sobretitulo">Gratuito · Fontes oficiais</p>
+        <h1>Jurisprudência por contexto</h1>
+        <p className="subtitulo">
+          Descreva a situação e encontre acórdãos relevantes, com o número do processo e a citação
+          pronta. Os textos vêm de fontes oficiais.
+        </p>
+      </header>
       <FormBusca destaque />
       <section aria-labelledby="titulo-exemplos" className="exemplos-inicio">
         <h2 id="titulo-exemplos">Exemplos</h2>

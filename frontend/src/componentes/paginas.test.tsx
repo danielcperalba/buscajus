@@ -74,6 +74,23 @@ describe("Detalhe (F5-08)", () => {
     expect(screen.getByRole("link", { name: /sistema do tribunal/ })).toBeInTheDocument();
   });
 
+  it("numera as seções na ordem em que aparecem, sem pular quando falta o dispositivo", () => {
+    const { unmount } = render(<Detalhe acordao={DETALHE} />);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "1. Ementa",
+      "2. Dispositivo",
+      "3. Citação",
+      "4. Fonte oficial",
+    ]);
+    unmount();
+    render(<Detalhe acordao={{ ...DETALHE, ...RESULTADO_DJEN, decisao: null }} />);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "1. Ementa",
+      "2. Citação",
+      "3. Fonte oficial",
+    ]);
+  });
+
   it("cancelado e removido (410)", () => {
     const { rerender } = render(
       <AcordaoIndisponivel
