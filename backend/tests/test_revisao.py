@@ -146,10 +146,11 @@ def test_fluxo_completo(acordaos: Engine, tmp_path: Path) -> None:
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in amostra), encoding="utf-8"
     )
 
-    # Primeira sessão: "vazou" (com um trecho que não existe e depois o certo), ok, sair.
-    term = TerminalFalso(["v", "Fulano Inexistente", NOME_VAZADO.upper(), "o", "x", "s"])
+    # Primeira sessão: "vazou" (com um trecho que não existe e depois o certo, e também
+    # anonimizou demais), ok, sair.
+    term = TerminalFalso(["v", "Fulano Inexistente", NOME_VAZADO.upper(), "s", "o", "x", "s"])
     sessao = revisao.revisar(acordaos, pasta, term.terminal)
-    assert sessao == {"ok": 1, "vazou": 1, "restantes": 98}
+    assert sessao == {"ok": 1, "vazou": 1, "anonimizou_demais": 1, "restantes": 98}
     assert any("não foi encontrado" in linha for linha in term.saida)
     situacao, motivo = _situacao(acordaos, "rev-1")
     assert situacao == "quarentena" and motivo and VERSAO in motivo
@@ -161,20 +162,30 @@ def test_fluxo_completo(acordaos: Engine, tmp_path: Path) -> None:
         )
     assert _situacao(acordaos, "rev-1")[0] == "quarentena"
 
-    # Segunda sessão continua de onde parou.
-    term = TerminalFalso(["ok"] * 98)
+    # Segunda sessão continua de onde parou; "anonimizou demais" não põe em quarentena.
+    term = TerminalFalso(["d", "demais"] + ["ok"] * 96)
     assert revisao.revisar(acordaos, pasta, term.terminal) == {
         "ok": 98,
         "vazou": 0,
+        "anonimizou_demais": 2,
         "restantes": 0,
     }
+    with acordaos.connect() as conexao:
+        assert (
+            conexao.execute(
+                text("SELECT count(*) FROM acordao WHERE situacao = 'quarentena'")
+            ).scalar_one()
+            == 1
+        )
 
     relatorio = tmp_path / "revisao-anonimizacao.md"
     resultado = revisao.resultado(pasta, relatorio)
     assert resultado["revisadas"] == 100 and resultado["vazamentos"] == 1
+    assert resultado["anonimizou_demais"] == 3 and resultado["taxa_anonimizou_demais"] == 0.03
     assert resultado["situacao"].startswith("reprovada")
+    assert sum(e["anonimizou_demais"] for e in resultado["por_estrato"].values()) == 3
     conteudo = relatorio.read_text(encoding="utf-8")
-    assert "| 1 |" in conteudo
+    assert "| 1 |" in conteudo and "| 3 (3.0%) |" in conteudo
     # Só agregados: nada das ementas, do trecho nem dos ids.
     for proibido in ("Clotilde", "CLOTILDE", "Ravanello", "SINTÉTICA", "rev-", "r001", "12.345"):
         assert proibido not in conteudo
@@ -234,6 +245,8 @@ def test_aprovacao_com_zero_vazamentos(tmp_path: Path) -> None:
     )
     resultado = revisao.resultado(pasta, None)
     assert resultado["situacao"] == "aprovada: 0 vazamentos"
+    # "Anonimizou demais" não entra no critério; respostas antigas não têm o campo.
+    assert resultado["anonimizou_demais"] == 0
     assert resultado["limite_superior_95"] == pytest.approx(0.0295, abs=1e-4)
     parcial = revisao.resultado(pasta, None, meta=200)
     assert parcial["situacao"].startswith("incompleta")
@@ -242,3 +255,20 @@ def test_aprovacao_com_zero_vazamentos(tmp_path: Path) -> None:
 def test_sem_amostra(tmp_path: Path) -> None:
     with pytest.raises(revisao.ErroRevisao, match="amostrar"):
         revisao.ler_amostra(tmp_path)
+
+
+def test_relatorio_de_rodada_anterior_a_anonimizou_demais() -> None:
+    antiga = {
+        "rodada": 1,
+        "data": "2026-10-30",
+        "amostra": 100,
+        "revisadas": 100,
+        "vazamentos": 0,
+        "taxa": 0.0,
+        "limite_superior_95": 0.0295,
+        "situacao": "aprovada: 0 vazamentos",
+        "por_estrato": {"TJPR/civel": {"amostra": 100, "revisadas": 100, "vazamentos": 0}},
+    }
+    conteudo = revisao.relatorio_markdown([antiga], revisao.META_APROVACAO)
+    assert "| 2.9% | - | aprovada" in conteudo
+    assert "| TJPR/civel | 100 | 100 | 0 | - |" in conteudo

@@ -9,6 +9,9 @@ Marcação das fixtures:
 - ``[[Nome]]``: pessoa física que deve ser anonimizada;
 - ``{{Nome}}``: nome que deve ficar.
 
+Além do vazamento, mede o **excesso de anonimização**: substituições que não tocam nenhum
+``[[Nome]]`` e a fração dos demais tokens do texto (``{{Nome}}`` inclusive) substituídos.
+
 Uso (de ``backend/``; os modelos são baixados para o cache do Hugging Face da máquina)::
 
     uv run --group ner --with "spacy>=3.8,<3.9" python scripts/ner_avaliacao.py \\
@@ -42,7 +45,9 @@ MARCACAO = re.compile(r"\[\[(.+?)\]\]|\{\{(.+?)\}\}", re.DOTALL)
 CANDIDATOS_HF = (
     ("Luciano/bertimbau-base-lener_br", "824f48e1b86fe24a86bd5f845f068c60468274a7"),
     ("Luciano/bertimbau-large-lener_br", "c515eb0a38f2f464d0fdfd7d27049989aa83e1bc"),
-    ("pierreguillou/ner-bert-base-cased-pt-lenerbr", "4ca0a39767b49788a93b59b632b19f614d12e26c"),
+    # Conversão para safetensors do SFconvertbot (refs/pr/4), logo depois de 4ca0a39, que só
+    # tem pytorch_model.bin (pickle).
+    ("pierreguillou/ner-bert-base-cased-pt-lenerbr", "a9cbb408a6139ef04ad1489526a0690064f62ce2"),
 )
 LIMIARES = (0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9)
 
@@ -95,9 +100,20 @@ class Placar:
     manter_preservados: int = 0
     previstas: int = 0
     previstas_corretas: int = 0
+    # Excesso de anonimização: tokens fora dos nomes a anonimizar que foram substituídos.
+    nao_sensiveis: int = 0
+    nao_sensiveis_substituidos: int = 0
 
     def somar(self, texto: str, marcas: Sequence[Marca], previstas: Sequence[Entidade]) -> None:
         self.ementas += 1
+        sensiveis = [m for m in marcas if m.anonimizar]
+        for token in _tokens(texto, 0, len(texto)):
+            if any(m.inicio <= token[0] and token[1] <= m.fim for m in sensiveis):
+                continue
+            self.nao_sensiveis += 1
+            self.nao_sensiveis_substituidos += any(
+                p.inicio < token[1] and token[0] < p.fim for p in previstas
+            )
         for marca in marcas:
             tokens = _tokens(texto, marca.inicio, marca.fim)
             cobertos = [t for t in tokens if _coberto(t, previstas)]
@@ -118,6 +134,11 @@ class Placar:
     def vazados(self) -> int:
         return self.anonimizar - self.anonimizar_total
 
+    @property
+    def substituicoes_indevidas(self) -> int:
+        """Substituições que não tocam nenhum nome a anonimizar."""
+        return self.previstas - self.previstas_corretas
+
     def linha(self) -> dict[str, str]:
         def taxa(a: int, b: int) -> str:
             return f"{a / b:.3f}" if b else "-"
@@ -128,6 +149,11 @@ class Placar:
             "recall (nome inteiro)": taxa(self.anonimizar_total, self.anonimizar),
             "recall (algum token)": taxa(self.anonimizar_parcial, self.anonimizar),
             "precisão": taxa(self.previstas_corretas, self.previstas),
+            "substituições indevidas": str(self.substituicoes_indevidas),
+            "excesso (tokens não sensíveis)": (
+                f"{self.nao_sensiveis_substituidos}/{self.nao_sensiveis} "
+                f"({taxa(self.nao_sensiveis_substituidos, self.nao_sensiveis)})"
+            ),
             "manter preservados": f"{self.manter_preservados}/{self.manter}",
         }
 
@@ -161,8 +187,11 @@ def tabela(linhas: Sequence[tuple[str, dict[str, str]]]) -> str:
 def detector_hf(nome: str, revisao: str, caixa: bool) -> DetectorTransformers:
     from transformers import AutoModelForTokenClassification, AutoTokenizer
 
+    # Só safetensors, como em modelo_ner.carregar_detector: nunca pesos em pickle.
     tokenizador = AutoTokenizer.from_pretrained(nome, revision=revisao)
-    modelo = AutoModelForTokenClassification.from_pretrained(nome, revision=revisao)
+    modelo = AutoModelForTokenClassification.from_pretrained(
+        nome, revision=revisao, use_safetensors=True
+    )
     return DetectorTransformers(modelo, tokenizador, versao=nome, limiar=0.5, caixa=caixa)
 
 

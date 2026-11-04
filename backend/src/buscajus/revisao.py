@@ -6,10 +6,11 @@ gravado em ``docs/`` tem apenas agregados.
 
 - :func:`amostrar`: sorteia ementas ativas do banco local, estratificadas por tribunal e área
   (TJPR: ~50% câmaras criminais, ~25% família, ~25% cível; TJDFT: uma fração da amostra).
-- :func:`revisar`: mostra uma ementa por vez e registra "ok" ou "vazou" (com o trecho que
-  escapou); salva a cada resposta, para parar e continuar depois. "Vazou" põe o acórdão em
-  quarentena na hora.
-- :func:`resultado`: revisadas, vazamentos, taxa e limite superior de 95%.
+- :func:`revisar`: mostra uma ementa por vez e registra "ok", "anonimizou demais" ou "vazou"
+  (com o trecho que escapou); salva a cada resposta, para parar e continuar depois. "Vazou"
+  põe o acórdão em quarentena na hora.
+- :func:`resultado`: revisadas, vazamentos, taxa, limite superior de 95% e quantas
+  anonimizaram demais (fora do critério de aprovação).
 - :func:`verificar`: confere se as regras atuais pegam os trechos marcados (só contagens).
 
 Critério de aprovação: 0 vazamentos em 100 ementas revisadas.
@@ -308,6 +309,22 @@ def trecho_no_texto(trecho: str, texto: str) -> bool:
     return bool(trecho.strip()) and _normalizado(trecho) in _normalizado(texto)
 
 
+# "Anonimizou demais" (trecho não sensível trocado por iniciais ou máscara, como um lugar, uma
+# empresa ou um doutrinador) não é vazamento: não reprova a rodada nem põe em quarentena; é só
+# contado, para medir o excesso de anonimização.
+OPCOES = {
+    "o": "ok",
+    "ok": "ok",
+    "d": "demais",
+    "demais": "demais",
+    "v": "vazou",
+    "vazou": "vazou",
+    "s": "sair",
+    "sair": "sair",
+}
+PERGUNTA = "ok, anonimizou demais, vazou ou sair? [o/d/v/s]: "
+
+
 def revisar(engine: Engine, pasta: Path, terminal: Terminal | None = None) -> dict[str, int]:
     """Laço da revisão. Devolve só as contagens da sessão."""
     term = terminal or Terminal()
@@ -324,32 +341,44 @@ def revisar(engine: Engine, pasta: Path, terminal: Terminal | None = None) -> di
             term.escrever(textwrap.fill(paragrafo, term.largura) if paragrafo.strip() else "")
         term.escrever("-" * term.largura)
         while True:
-            opcao = term.ler("ok, vazou ou sair? [o/v/s]: ").strip().lower()
-            if opcao in ("o", "ok", "v", "vazou", "s", "sair"):
+            opcao = term.ler(PERGUNTA).strip().lower()
+            if opcao in OPCOES:
                 break
-        if opcao.startswith("s"):
+        opcao = OPCOES[opcao]
+        if opcao == "sair":
             break
         registro: dict[str, Any] = {
             "id_amostra": item["id_amostra"],
             "acordao_id": item["acordao_id"],
             "em": datetime.now(UTC).isoformat(timespec="seconds"),
         }
-        if opcao.startswith("o"):
-            registro["resultado"] = "ok"
+        if opcao in ("ok", "demais"):
+            registro |= {"resultado": "ok", "demais": opcao == "demais"}
         else:
             while True:
                 trecho = term.ler("Digite o trecho que escapou (como aparece no texto): ")
                 if trecho_no_texto(trecho, str(item["ementa"])):
                     break
                 term.escrever("O trecho não foi encontrado nesta ementa; digite de novo.")
-            registro |= {"resultado": "vazou", "trecho": trecho.strip()}
+            demais = term.ler("Também anonimizou demais? [s/N]: ").strip().lower()
+            registro |= {
+                "resultado": "vazou",
+                "trecho": trecho.strip(),
+                "demais": demais in ("s", "sim"),
+            }
             with engine.begin() as conexao:
                 marcar_vazamento(conexao, int(item["acordao_id"]))
             term.escrever("Acórdão posto em quarentena (fora da busca).")
         _anexar(pasta / RESPOSTAS, registro)
         sessao[registro["resultado"]] += 1
+        sessao["demais"] += registro["demais"]
     restantes = len(amostra) - len(ler_respostas(pasta))
-    return {"ok": sessao["ok"], "vazou": sessao["vazou"], "restantes": restantes}
+    return {
+        "ok": sessao["ok"],
+        "vazou": sessao["vazou"],
+        "anonimizou_demais": sessao["demais"],
+        "restantes": restantes,
+    }
 
 
 # --- Resultado -------------------------------------------------------------------------------
@@ -399,13 +428,17 @@ def resultado(pasta: Path, relatorio: Path | None, *, meta: int = META_APROVACAO
     estratos = {r["id_amostra"]: f"{r['tribunal']}/{r['estrato']}" for r in amostra}
     revisadas = len(respostas)
     vazamentos = sum(1 for r in respostas.values() if r["resultado"] == "vazou")
+    demais = sum(1 for r in respostas.values() if r.get("demais"))
     por_estrato: dict[str, dict[str, int]] = {}
     for id_amostra, nome in estratos.items():
-        linha = por_estrato.setdefault(nome, {"amostra": 0, "revisadas": 0, "vazamentos": 0})
+        linha = por_estrato.setdefault(
+            nome, {"amostra": 0, "revisadas": 0, "vazamentos": 0, "anonimizou_demais": 0}
+        )
         linha["amostra"] += 1
         if id_amostra in respostas:
             linha["revisadas"] += 1
             linha["vazamentos"] += respostas[id_amostra]["resultado"] == "vazou"
+            linha["anonimizou_demais"] += bool(respostas[id_amostra].get("demais"))
     resumo = {
         "rodada": len(_rodadas_arquivadas(pasta)) + 1,
         "data": datetime.now(UTC).date().isoformat(),
@@ -414,6 +447,9 @@ def resultado(pasta: Path, relatorio: Path | None, *, meta: int = META_APROVACAO
         "vazamentos": vazamentos,
         "taxa": round(vazamentos / revisadas, 4) if revisadas else None,
         "limite_superior_95": round(limite_superior(vazamentos, revisadas), 4),
+        # Não entra no critério de aprovação (seção 6.7): mede o excesso de anonimização.
+        "anonimizou_demais": demais,
+        "taxa_anonimizou_demais": round(demais / revisadas, 4) if revisadas else None,
         "situacao": _situacao(revisadas, len(amostra), vazamentos, meta),
         "por_estrato": dict(sorted(por_estrato.items())),
     }
@@ -428,6 +464,13 @@ def resultado(pasta: Path, relatorio: Path | None, *, meta: int = META_APROVACAO
 def _rodadas_arquivadas(pasta: Path) -> list[Path]:
     base = pasta / RODADAS
     return sorted(p for p in base.iterdir() if p.is_dir()) if base.exists() else []
+
+
+def _demais(rodada: Mapping[str, Any], pct: Callable[[object], str]) -> str:
+    """Rodadas anteriores à opção "anonimizou demais" não têm a contagem."""
+    if "anonimizou_demais" not in rodada:
+        return "-"
+    return f"{rodada['anonimizou_demais']} ({pct(rodada['taxa_anonimizou_demais'])})"
 
 
 def relatorio_markdown(historico: Sequence[Mapping[str, Any]], meta: int) -> str:
@@ -446,15 +489,18 @@ def relatorio_markdown(historico: Sequence[Mapping[str, Any]], meta: int) -> str
         "regras, reprocessar e revisar uma nova amostra. Depois do lançamento, amostra mensal "
         "de 30 ementas novas. O limite superior é unilateral, de 95% (Clopper-Pearson).",
         "",
+        "*Anonimizou demais*: ementas em que algo não sensível (lugar, empresa, doutrinador…) foi "
+        "trocado por iniciais ou máscara. Mede o excesso de anonimização e não entra no critério.",
+        "",
         "| Rodada | Data | Amostra | Revisadas | Vazamentos | Taxa | Limite superior (95%) "
-        "| Situação |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Anonimizou demais | Situação |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for h in historico:
         linhas.append(
             f"| {h['rodada']} | {h['data']} | {h['amostra']} | {h['revisadas']} | "
             f"{h['vazamentos']} | {pct(h['taxa'])} | {pct(h['limite_superior_95'])} | "
-            f"{h['situacao']} |"
+            f"{_demais(h, pct)} | {h['situacao']} |"
         )
     if historico:
         ultimo = historico[-1]
@@ -462,12 +508,13 @@ def relatorio_markdown(historico: Sequence[Mapping[str, Any]], meta: int) -> str
             "",
             f"## Rodada {ultimo['rodada']} por estrato",
             "",
-            "| Estrato | Amostra | Revisadas | Vazamentos |",
-            "|---|---|---|---|",
+            "| Estrato | Amostra | Revisadas | Vazamentos | Anonimizou demais |",
+            "|---|---|---|---|---|",
         ]
         for nome, dados in dict(ultimo["por_estrato"]).items():
             linhas.append(
-                f"| {nome} | {dados['amostra']} | {dados['revisadas']} | {dados['vazamentos']} |"
+                f"| {nome} | {dados['amostra']} | {dados['revisadas']} | {dados['vazamentos']} "
+                f"| {dados.get('anonimizou_demais', '-')} |"
             )
     return "\n".join(linhas) + "\n"
 

@@ -7,6 +7,7 @@ limpeza apaga tudo que não é dado sintético de desenvolvimento (processos de 
 import argparse
 import dataclasses
 import json
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -286,3 +287,88 @@ def test_cli_carregar_chama_o_worker(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "-T",
         "worker",
     ]
+
+
+# --- Execução interrompida (contêiner do worker morto no meio) ------------------------------
+
+
+def _subprocess_falso(monkeypatch: pytest.MonkeyPatch, codigo: int, saida: str) -> list[list[str]]:
+    chamadas: list[list[str]] = []
+
+    def run(comando: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        chamadas.append(comando)
+        return subprocess.CompletedProcess(comando, codigo, stdout=saida)
+
+    monkeypatch.setattr(piloto.subprocess, "run", run)
+    return chamadas
+
+
+@pytest.mark.parametrize("saida", ["", '{"dias": {"djen": ["2026-10-29"]', "[]", "erro\n"])
+def test_worker_sem_resumo_e_falha_mesmo_com_codigo_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    saida: str,
+) -> None:
+    raiz = _repositorio(tmp_path)
+    monkeypatch.chdir(raiz)
+    chamadas = _subprocess_falso(monkeypatch, 0, saida)
+    assert cli.main(["piloto", "carregar"]) != 0
+    assert chamadas and chamadas[0][-3:] == ["executar-carga", "--dias-uteis", "5"]
+    erro = capsys.readouterr().err
+    assert "não terminou" in erro and "docker compose ps -a" in erro
+
+
+def test_worker_com_resumo_devolve_o_codigo_do_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raiz = _repositorio(tmp_path)
+    monkeypatch.chdir(raiz)
+    _subprocess_falso(monkeypatch, 0, '{"dias": {}}\n')
+    assert cli.main(["piloto", "carregar"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"dias": {}}
+    # Unidades com erro: o worker devolve o resumo e sai com 1.
+    _subprocess_falso(monkeypatch, 1, '{"unidades_com_erro": {"djen": 1}}\n')
+    assert cli.main(["piloto", "carregar"]) == 1
+
+
+def test_dias_interrompidos_vem_primeiro() -> None:
+    janela = piloto.dias_uteis_anteriores(date(2026, 10, 30))
+    interrompido = date(2026, 10, 20)
+    candidatos = piloto.ordenar_candidatos([interrompido, janela[0]], janela)
+    assert candidatos[:2] == [interrompido, janela[0]]
+    # Sem repetir: os interrompidos saem da janela.
+    assert candidatos[2:] == [d for d in janela[1:] if d != interrompido]
+    assert len(candidatos) == len(set(candidatos)) == len(janela)
+
+
+def test_unidades_interrompidas_e_trava_da_carga(banco: Engine) -> None:
+    with banco.begin() as conexao:
+        conexao.execute(
+            text("""
+                INSERT INTO caderno_djen (tribunal, data, status) VALUES
+                    ('TJPR', '2026-10-28', 'em_andamento'),
+                    ('TJPR', '2026-10-29', 'em_andamento'),
+                    ('TJPR', '2026-10-27', 'processado')
+            """)
+        )
+        conexao.execute(
+            text("""
+                INSERT INTO coleta_janela (fonte, tribunal, data_inicio, data_fim, status) VALUES
+                    ('tjdft', 'TJDFT', '2026-10-29', '2026-10-29', 'em_andamento'),
+                    ('tjdft', 'TJDFT', '2026-10-28', '2026-10-28', 'concluida')
+            """)
+        )
+    assert piloto.unidades_interrompidas(banco) == {
+        "djen": [date(2026, 10, 29), date(2026, 10, 28)],
+        "tjdft": [date(2026, 10, 29)],
+    }
+
+    with (
+        piloto.trava_da_carga(banco),
+        pytest.raises(piloto.ErroPiloto, match="outra carga"),
+        piloto.trava_da_carga(banco),
+    ):
+        pytest.fail("duas cargas ao mesmo tempo")
+    with piloto.trava_da_carga(banco):  # liberada ao sair
+        pass

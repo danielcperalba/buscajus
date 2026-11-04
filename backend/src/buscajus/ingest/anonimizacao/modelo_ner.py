@@ -16,7 +16,10 @@ Sem modelo configurado, ou sem os pesos no volume, não há detector e o pipelin
 (falha fechada).
 """
 
+import logging
+import os
 import re
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +29,8 @@ from buscajus.core.config import ConfigAnonimizacao
 from buscajus.ingest.anonimizacao.camada2 import DetectorPessoas, Entidade
 from buscajus.ingest.anonimizacao.nomes import PARTICULAS, alinhado
 from buscajus.ingest.anonimizacao.pipeline import ErroAnonimizacao
+
+log = logging.getLogger(__name__)
 
 ROTULOS_PESSOA = frozenset({"PESSOA", "PER", "PERSON"})
 # Arquivos do repositório do modelo que vão para o volume (sem os pesos em pickle).
@@ -210,7 +215,10 @@ def carregar_detector(
     }
     try:
         tokenizador = AutoTokenizer.from_pretrained(config.modelo_ner, **opcoes)
-        modelo = AutoModelForTokenClassification.from_pretrained(config.modelo_ner, **opcoes)
+        # Só safetensors: o volume não recebe pesos em pickle (ARQUIVOS_MODELO).
+        modelo = AutoModelForTokenClassification.from_pretrained(
+            config.modelo_ner, use_safetensors=True, **opcoes
+        )
     except OSError as exc:
         raise ErroAnonimizacao(
             "pesos do modelo de NER ausentes no volume de modelos: rode "
@@ -225,16 +233,72 @@ def carregar_detector(
     )
 
 
+_SEM_PERMISSAO = (
+    "sem permissão de escrita em {caminho}: o volume de modelos precisa pertencer ao usuário "
+    "da imagem (uid 10001); corrija com `docker compose run --rm --user root worker "
+    "chown -R 10001 /dados/modelos`"
+)
+
+
+def limpar_travas_orfas(diretorio: Path) -> int:
+    """Apaga as travas (``.locks/**/*.lock``) de downloads interrompidos.
+
+    O huggingface-hub trava cada arquivo com ``flock``; uma trava que ninguém segura é de um
+    processo que morreu e é apagada. As que estão em uso (outro download) ficam. Só no Linux,
+    onde o comando roda (worker do compose).
+    """
+    travas = diretorio / ".locks"
+    if sys.platform == "win32" or not travas.is_dir():
+        return 0
+    import fcntl
+
+    removidas = 0
+    for trava in sorted(travas.rglob("*.lock")):
+        try:
+            descritor = os.open(trava, os.O_RDWR)
+        except FileNotFoundError:
+            continue
+        except PermissionError as exc:
+            raise ErroAnonimizacao(_SEM_PERMISSAO.format(caminho=trava)) from exc
+        try:
+            try:
+                fcntl.flock(descritor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            try:
+                trava.unlink()
+            except PermissionError as exc:
+                raise ErroAnonimizacao(_SEM_PERMISSAO.format(caminho=trava.parent)) from exc
+            removidas += 1
+        finally:
+            os.close(descritor)
+    return removidas
+
+
 def baixar_modelo(config: ConfigAnonimizacao, diretorio_modelos: Path) -> Path:
-    """Baixa a revisão fixada para o volume de modelos (passo explícito de implantação)."""
+    """Baixa a revisão fixada para o volume de modelos (passo explícito de implantação).
+
+    Na imagem, o xet fica desligado (``HF_HUB_DISABLE_XET``) e o ``HF_HOME`` aponta para uma
+    pasta do usuário da imagem (Dockerfile): o download é um HTTP simples para o volume.
+    """
     if not config.modelo_ner or not config.revisao_ner:
         raise ErroAnonimizacao("modelo de NER ou revisão não configurados")
+    destino = _diretorio(diretorio_modelos)
+    try:
+        destino.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise ErroAnonimizacao(_SEM_PERMISSAO.format(caminho=destino)) from exc
+    if not os.access(destino, os.W_OK):
+        raise ErroAnonimizacao(_SEM_PERMISSAO.format(caminho=destino))
+    removidas = limpar_travas_orfas(destino)
+    if removidas:
+        log.warning("travas órfãs de download apagadas", extra={"travas": removidas})
     from huggingface_hub import snapshot_download
 
     caminho = snapshot_download(
         config.modelo_ner,
         revision=config.revisao_ner,
-        cache_dir=str(_diretorio(diretorio_modelos)),
+        cache_dir=str(destino),
         allow_patterns=list(ARQUIVOS_MODELO),
     )
     return Path(caminho)
