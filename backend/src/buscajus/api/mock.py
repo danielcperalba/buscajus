@@ -6,15 +6,18 @@ nomes genéricos ("Fulano de Tal"), processos do ano 2099 e ementas escritas par
 """
 
 import html
+import math
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from itertools import count
 
 from buscajus.api.consulta import ConsultaAnalisada
 from buscajus.api.esquemas import (
+    LIMITE_RECENTES,
     LIMITE_RESULTADOS,
     POR_PAGINA,
+    POR_PAGINA_RECENTES,
     AcordaosDoProcesso,
     Classe,
     CoberturaTribunal,
@@ -27,6 +30,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    RespostaRecentes,
     ResultadoBusca,
     SituacaoAcordao,
 )
@@ -145,6 +149,57 @@ EXEMPLOS = (
         )
     ),
 )
+
+
+def _recente(n: int) -> _Exemplo:
+    """Acórdão sintético a mais, só para a lista de recentes ter duas páginas (F5-13)."""
+    djen = n % 2 == 0
+    tribunal, codigo = ("TJPR", "16") if djen else ("TJDFT", "07")
+    numero = _numero(20000 + n, codigo)
+    julgamento = date(2026, 9, 1) + timedelta(days=n)
+    publicacao = julgamento + timedelta(days=7)
+    orgao = "2ª Turma Recursal" if djen else "5ª Turma Cível"
+    classe = (
+        Classe(codigo=460, nome="Recurso Inominado Cível")
+        if djen
+        else Classe(codigo=198, nome="Apelação Cível")
+    )
+    data_j, data_p = julgamento.strftime("%d/%m/%Y"), publicacao.strftime("%d/%m/%Y")
+    final = f"DJEN de {data_p}" if djen else f"publ. PJe {data_p}"
+    return _Exemplo(
+        DetalheAcordao(
+            id=100 + n,
+            fonte="djen" if djen else "tjdft",
+            tribunal=tribunal,
+            numero_processo=numero,
+            orgao_julgador=orgao,
+            classe=classe,
+            relator="Fulano de Tal",
+            relator_designado=None,
+            turma_recursal=djen,
+            data_julgamento=julgamento,
+            data_publicacao=None if djen else publicacao,
+            data_disponibilizacao=publicacao if djen else None,
+            link_oficial=(
+                f"https://comunicaapi.pje.jus.br/api/v1/comunicacao/recente{n}/certidao"
+                if djen
+                else f"https://jurisdf.tjdft.jus.br/acordaos/00000000-2099-4000-8000-{n:012d}"
+            ),
+            link_tribunal=None,
+            citacao=(
+                f"{tribunal}, {orgao}, {classe.nome} nº {numero}, Rel. Fulano de Tal, "
+                f"j. {data_j}, {final}."
+            ),
+            ementa=f"EMENTA SINTÉTICA Nº {n}. Exemplo da lista de acórdãos recentes.",
+            decisao=None if djen else "CONHECIDO. DESPROVIDO. UNÂNIME.",
+            possui_inteiro_teor=None if djen else True,
+        )
+    )
+
+
+# Fora da busca, dos filtros e da cobertura (os testes contam com os três EXEMPLOS); aparecem
+# só na lista de recentes e no detalhe.
+RECENTES_EXTRAS = tuple(_recente(n) for n in range(1, 13))
 INDISPONIVEIS = {
     4: Indisponivel(erro="removido", mensagem="Acórdão removido a pedido.", link_oficial=None),
     5: Indisponivel(
@@ -153,6 +208,10 @@ INDISPONIVEIS = {
         link_oficial="https://comunicaapi.pje.jus.br/api/v1/comunicacao/exemplo5/certidao",
     ),
 }
+
+
+def _publicacao(exemplo: _Exemplo) -> date | None:
+    return exemplo.detalhe.data_publicacao or exemplo.detalhe.data_disponibilizacao
 
 
 def _palavras(texto: str) -> set[str]:
@@ -223,10 +282,27 @@ class ServicoMock:
             resultados=[_resultado(e, palavras) for e in candidatos[inicio : inicio + POR_PAGINA]],
         )
 
+    def recentes(self, pagina: int) -> RespostaRecentes:
+        exemplos = sorted(
+            (*EXEMPLOS, *RECENTES_EXTRAS),
+            key=lambda e: (_publicacao(e) or date.min, e.detalhe.id),
+            reverse=True,
+        )[:LIMITE_RECENTES]
+        inicio = (pagina - 1) * POR_PAGINA_RECENTES
+        return RespostaRecentes(
+            pagina=pagina,
+            total=len(exemplos),
+            total_paginas=math.ceil(len(exemplos) / POR_PAGINA_RECENTES),
+            resultados=[
+                _resultado(e, set()) for e in exemplos[inicio : inicio + POR_PAGINA_RECENTES]
+            ],
+        )
+
     def detalhe(self, acordao_id: int) -> DetalheAcordao | Indisponivel | None:
         if acordao_id in INDISPONIVEIS:
             return INDISPONIVEIS[acordao_id]
-        return next((e.detalhe for e in EXEMPLOS if e.detalhe.id == acordao_id), None)
+        todos = (*EXEMPLOS, *RECENTES_EXTRAS)
+        return next((e.detalhe for e in todos if e.detalhe.id == acordao_id), None)
 
     def situacao(self, acordao_id: int) -> SituacaoAcordao | None:
         resultado = self.detalhe(acordao_id)

@@ -323,7 +323,8 @@ nav ul {
 }
 
 .estado-erro h1,
-.estado-erro h2 {
+.estado-erro h2,
+.estado-erro h3 {
   color: var(--erro);
 }
 
@@ -352,6 +353,20 @@ nav ul {
 
 .paginacao [aria-disabled="true"] {
   color: var(--texto-suave);
+}
+
+.paginacao-recentes ul {
+  align-items: center;
+}
+
+.paginacao-posicao {
+  color: var(--texto-suave);
+  padding: 0 0.5rem;
+}
+
+/* Acórdãos recentes na página inicial (F5-13) */
+.recentes {
+  margin-top: 2.5rem;
 }
 
 @media (max-width: 40rem) {

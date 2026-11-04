@@ -39,6 +39,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/acordaos/recentes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recentes
+         * @description Acórdãos ativos da publicação mais recente à mais antiga, 10 por página (F5-13).
+         *
+         *     Data de publicação: ``data_publicacao`` (TJDFT) ou ``data_disponibilizacao`` (DJEN);
+         *     desempate por id decrescente. Página além da última vem com ``resultados`` vazio.
+         */
+        get: operations["recentes_api_v1_acordaos_recentes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/acordaos/{acordao_id}": {
         parameters: {
             query?: never;
@@ -437,6 +460,34 @@ export interface components {
             /** Resultados */
             resultados: components["schemas"]["ResultadoBusca"][];
         };
+        /**
+         * RespostaRecentes
+         * @description Acórdãos ativos do mais recente ao mais antigo (data de publicação; F5-13).
+         */
+        RespostaRecentes: {
+            /** Pagina */
+            pagina: number;
+            /**
+             * Por Pagina
+             * @default 10
+             */
+            por_pagina: number;
+            /**
+             * Total
+             * @description Até 1000: não há páginas além de 100
+             */
+            total: number;
+            /**
+             * Total Paginas
+             * @description Até 100
+             */
+            total_paginas: number;
+            /**
+             * Resultados
+             * @description Mesmo item da busca; o trecho é o começo da ementa, sem destaque
+             */
+            resultados: components["schemas"]["ResultadoBusca"][];
+        };
         /** ResultadoBusca */
         ResultadoBusca: {
             /** Id */
@@ -611,6 +662,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    recentes_api_v1_acordaos_recentes_get: {
+        parameters: {
+            query?: {
+                pagina?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RespostaRecentes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Too Many Requests */

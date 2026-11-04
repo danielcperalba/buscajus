@@ -166,3 +166,19 @@ def test_0007_colunas_do_tjdft(alembic: ConfigAlembic, engine: Engine) -> None:
     assert novas <= colunas()
     command.downgrade(alembic, "0006")
     assert not novas & colunas()
+
+
+def test_0008_indice_dos_recentes(alembic: ConfigAlembic, engine: Engine) -> None:
+    def definicao() -> str | None:
+        with engine.connect() as conexao:
+            return conexao.scalar(
+                text("SELECT indexdef FROM pg_indexes WHERE indexname = 'acordao_recentes_idx'")
+            )
+
+    command.upgrade(alembic, "0008")
+    indice = definicao()
+    assert indice is not None
+    assert "COALESCE(data_publicacao, data_disponibilizacao) DESC NULLS LAST, id DESC" in indice
+    assert "WHERE (situacao = 'ativo'" in indice
+    command.downgrade(alembic, "0007")
+    assert definicao() is None

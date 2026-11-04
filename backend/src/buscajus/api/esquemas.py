@@ -13,6 +13,10 @@ Fonte = Literal["djen", "tjdft"]
 AVISO = "Texto reproduzido da fonte oficial. Consulte o documento original."
 LIMITE_RESULTADOS = 200
 POR_PAGINA = 20
+# Acórdãos recentes (F5-13): páginas de 10, até a página 100.
+POR_PAGINA_RECENTES = 10
+MAXIMO_PAGINAS_RECENTES = 100
+LIMITE_RECENTES = POR_PAGINA_RECENTES * MAXIMO_PAGINAS_RECENTES
 
 
 class Esquema(BaseModel):
@@ -102,6 +106,20 @@ class RespostaBusca(Esquema):
     por_pagina: int = POR_PAGINA
     total: int = Field(description=f"Até {LIMITE_RESULTADOS}; não há páginas além disso")
     resultados: list[ResultadoBusca]
+
+
+class RespostaRecentes(Esquema):
+    """Acórdãos ativos do mais recente ao mais antigo (data de publicação; F5-13)."""
+
+    pagina: int
+    por_pagina: int = POR_PAGINA_RECENTES
+    total: int = Field(
+        description=f"Até {LIMITE_RECENTES}: não há páginas além de {MAXIMO_PAGINAS_RECENTES}"
+    )
+    total_paginas: int = Field(description=f"Até {MAXIMO_PAGINAS_RECENTES}")
+    resultados: list[ResultadoBusca] = Field(
+        description="Mesmo item da busca; o trecho é o começo da ementa, sem destaque"
+    )
 
 
 class AcordaosDoProcesso(Esquema):

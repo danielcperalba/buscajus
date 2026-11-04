@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
+import { Carregando } from "@/componentes/Estados";
 import { FormBusca } from "@/componentes/FormBusca";
+import { Recentes } from "@/componentes/Recentes";
 import { EXEMPLOS, urlBusca } from "@/lib/busca";
+import { ANCORA_RECENTES } from "@/lib/recentes";
 
-export default function Inicio() {
+/**
+ * Página inicial. Formulário e exemplos são estáticos; a lista de acórdãos recentes (F5-13) lê
+ * ``?pagina=`` e fica num Suspense (exigência do Cache Components), em streaming do servidor.
+ */
+export default function Inicio({ searchParams }: PageProps<"/">) {
   return (
     <div className="inicio">
       <h1>Jurisprudência por contexto</h1>
@@ -21,6 +29,12 @@ export default function Inicio() {
             </li>
           ))}
         </ul>
+      </section>
+      <section id={ANCORA_RECENTES} aria-labelledby="titulo-recentes" className="recentes">
+        <h2 id="titulo-recentes">Acórdãos recentes</h2>
+        <Suspense fallback={<Carregando mensagem="Carregando acórdãos recentes…" />}>
+          <Recentes parametros={searchParams} />
+        </Suspense>
       </section>
     </div>
   );

@@ -12,6 +12,7 @@ from buscajus import __version__
 from buscajus.api.consulta import MAXIMO_CONSULTA, analisar_consulta
 from buscajus.api.esquemas import (
     LIMITE_RESULTADOS,
+    MAXIMO_PAGINAS_RECENTES,
     POR_PAGINA,
     AcordaosDoProcesso,
     CoberturaTribunal,
@@ -24,6 +25,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    RespostaRecentes,
     SituacaoAcordao,
 )
 from buscajus.api.limite import LimitadorJanela, ip_do_cliente, verificar
@@ -111,6 +113,20 @@ def buscar(
         data_fim=data_fim,
     )
     return servico.buscar(consulta, filtros, pagina)
+
+
+# Antes de /acordaos/{acordao_id}: senão "recentes" seria lido como id (e daria 422).
+@rotas.get("/acordaos/recentes", responses=_erros(429), dependencies=[LimiteConsulta])
+def recentes(
+    servico: Servico,
+    pagina: Annotated[int, Query(ge=1, le=MAXIMO_PAGINAS_RECENTES)] = 1,
+) -> RespostaRecentes:
+    """Acórdãos ativos da publicação mais recente à mais antiga, 10 por página (F5-13).
+
+    Data de publicação: ``data_publicacao`` (TJDFT) ou ``data_disponibilizacao`` (DJEN);
+    desempate por id decrescente. Página além da última vem com ``resultados`` vazio.
+    """
+    return servico.recentes(pagina)
 
 
 @rotas.get(

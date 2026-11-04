@@ -5,6 +5,8 @@
   desligado até o F3-06) fundidos por RRF, até 200 resultados, páginas de 20 (F4-08). Um número
   junto com outros termos vira filtro. Cada resultado traz o trecho destacado, a citação e o
   aviso de reprodução.
+- ``recentes``: acórdãos ativos da publicação mais recente à mais antiga, páginas de 10 até a
+  100, pelo índice ``acordao_recentes_idx`` (F5-13).
 - ``detalhe``: só ``ativo``; ``cancelado`` e ``removido`` → 410; o resto (inexistente,
   quarentena, duplicado) → 404 (F4-09).
 - ``processo``: acórdãos ativos de um número completo ou de um prefixo (limitado).
@@ -13,6 +15,7 @@
   (``busca.pedidos``) (F4-12).
 """
 
+import math
 import re
 import time
 from collections.abc import Iterable, Mapping
@@ -22,8 +25,10 @@ from sqlalchemy import Connection, Engine, text
 
 from buscajus.api.consulta import ConsultaAnalisada, NumeroNaConsulta, analisar_consulta
 from buscajus.api.esquemas import (
+    LIMITE_RECENTES,
     LIMITE_RESULTADOS,
     POR_PAGINA,
+    POR_PAGINA_RECENTES,
     AcordaosDoProcesso,
     Classe,
     CoberturaTribunal,
@@ -36,6 +41,7 @@ from buscajus.api.esquemas import (
     Relator,
     RemocaoRecebida,
     RespostaBusca,
+    RespostaRecentes,
     ResultadoBusca,
     SituacaoAcordao,
 )
@@ -57,6 +63,13 @@ COLUNAS = """
     a.decisao, a.possui_inteiro_teor, a.situacao::text AS situacao
 """
 ORDEM_DATA = "a.data_referencia DESC NULLS LAST, a.id DESC"
+# Data de publicação dos resultados: TJDFT (data_publicacao) ou DJEN (data_disponibilizacao).
+# Igual à expressão do índice acordao_recentes_idx (migração 0008), senão ele não é usado.
+ORDEM_RECENTES = "coalesce(a.data_publicacao, a.data_disponibilizacao) DESC NULLS LAST, a.id DESC"
+SQL_RECENTES = (
+    f"SELECT {COLUNAS} FROM acordao a WHERE a.situacao = 'ativo' "  # noqa: S608
+    f"ORDER BY {ORDEM_RECENTES} LIMIT :limite OFFSET :inicio"
+)
 # Link de um resultado: página de detalhe do site ou rota da API.
 _LINK_ACORDAO = re.compile(r"/acordaos?/(\d+)(?:\D|$)")
 
@@ -178,6 +191,34 @@ class ServicoPostgres:
     @staticmethod
     def _resultado(linha: Mapping[str, Any], trecho: str | None) -> ResultadoBusca:
         return ResultadoBusca(**_campos(linha), trecho=trecho or inicio_da_ementa(linha["ementa"]))
+
+    # --- /acordaos/recentes (F5-13) ------------------------------------------------
+
+    def recentes(self, numero_pagina: int) -> RespostaRecentes:
+        with self._engine.connect() as conexao:
+            # Contagem limitada: além da página 100 não há o que mostrar, e contar todos os
+            # ativos a cada visita à página inicial percorreria o índice inteiro.
+            total = conexao.scalar(
+                text(
+                    "SELECT count(*) FROM (SELECT 1 FROM acordao "
+                    "WHERE situacao = 'ativo' LIMIT :limite) ativos"
+                ),
+                {"limite": LIMITE_RECENTES},
+            )
+            linhas = conexao.execute(
+                text(SQL_RECENTES),
+                {
+                    "limite": POR_PAGINA_RECENTES,
+                    "inicio": (numero_pagina - 1) * POR_PAGINA_RECENTES,
+                },
+            )
+            resultados = [self._resultado(dict(linha._mapping), None) for linha in linhas]
+        return RespostaRecentes(
+            pagina=numero_pagina,
+            total=total or 0,
+            total_paginas=math.ceil((total or 0) / POR_PAGINA_RECENTES),
+            resultados=resultados,
+        )
 
     # --- /acordaos/{id} (F4-09) ----------------------------------------------------
 
