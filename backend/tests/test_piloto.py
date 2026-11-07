@@ -349,7 +349,8 @@ def test_unidades_interrompidas_e_trava_da_carga(banco: Engine) -> None:
                 INSERT INTO caderno_djen (tribunal, data, status) VALUES
                     ('TJPR', '2026-10-28', 'em_andamento'),
                     ('TJPR', '2026-10-29', 'em_andamento'),
-                    ('TJPR', '2026-10-27', 'processado')
+                    ('TJPR', '2026-10-27', 'processado'),
+                    ('TJRJ', '2026-10-30', 'em_andamento')
             """)
         )
         conexao.execute(
@@ -359,10 +360,12 @@ def test_unidades_interrompidas_e_trava_da_carga(banco: Engine) -> None:
                     ('tjdft', 'TJDFT', '2026-10-28', '2026-10-28', 'concluida')
             """)
         )
-    assert piloto.unidades_interrompidas(banco) == {
+    assert piloto.unidades_interrompidas(banco, "TJPR") == {
         "djen": [date(2026, 10, 29), date(2026, 10, 28)],
         "tjdft": [date(2026, 10, 29)],
     }
+    # Só os cadernos do tribunal da carga (F1-50).
+    assert piloto.unidades_interrompidas(banco, "TJRJ")["djen"] == [date(2026, 10, 30)]
 
     with (
         piloto.trava_da_carga(banco),

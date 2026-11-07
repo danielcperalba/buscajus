@@ -11,6 +11,8 @@ x-backend: &backend
     BUSCAJUS_DIRETORIO_RAW: /dados/raw
     BUSCAJUS_DIRETORIO_MODELOS: /dados/modelos
     BUSCAJUS_DIRETORIO_TMP_CADERNOS: /tmp-cadernos
+    # Tribunal coletado pelo DJEN: TJRJ (acórdãos do eproc) desde o F1-50; antes, TJPR.
+    BUSCAJUS_DJEN__TRIBUNAIS: '["TJRJ"]'
 
 services:
   db:

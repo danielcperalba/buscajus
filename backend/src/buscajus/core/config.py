@@ -22,6 +22,10 @@ SENHA_PADRAO_DESENVOLVIMENTO = "buscajus"
 # (ARCHITECTURE.md, seção 3.5).
 TRIBUNAIS_COM_CONECTOR_PROPRIO = {"TJDFT": "tjdft"}
 
+# Tribunais que não publicam "Ementa de Acórdão" no DJEN. O TJRJ publica o inteiro teor do
+# eproc como "Acórdão"; a ementa é recortada antes da anonimização (ingest/djen/recorte.py).
+TIPOS_DOCUMENTO_POR_TRIBUNAL = {"TJRJ": ["Acórdão"]}
+
 
 # Identificação do projeto no User-Agent das requisições às fontes (ARCHITECTURE.md, seção 3.1).
 URL_PROJETO = "https://github.com/danielcperalba/buscajus"
@@ -55,9 +59,12 @@ class AjusteTribunalDjen(BaseModel):
 class ConfigDjen(BaseModel):
     ativo: bool = True
     url_api: str = "https://comunicaapi.pje.jus.br"
+    # O compose usa TJRJ desde o F1-50 (BUSCAJUS_DJEN__TRIBUNAIS); o padrão do código segue
+    # TJPR, o tribunal das fixtures sintéticas.
     tribunais: list[str] = ["TJPR"]
-    # Primeiro dia com "Ementa de Acórdão" no caderno de cada tribunal (seção 3.2).
-    inicio_ementas: dict[str, date] = {"TJPR": date(2025, 7, 23)}
+    # Primeiro dia com ementas no caderno de cada tribunal (seção 3.2). TJRJ: primeiro caderno
+    # com "Acórdão" do eproc entre os medidos no F1-50 (2 itens em 02/06/2025; 465 em 05/11/2026).
+    inicio_ementas: dict[str, date] = {"TJPR": date(2025, 7, 23), "TJRJ": date(2025, 6, 2)}
     tipos_documento_aceitos: list[str] = ["Ementa de Acórdão"]
     requisicoes_por_segundo: float = Field(default=1.0, gt=0)
     # O ZIP fica no tmpfs do worker (1100 MB no compose). Maior caderno do TJPR visto no
@@ -77,7 +84,11 @@ class ConfigDjen(BaseModel):
 
     def tipos_aceitos(self, tribunal: str) -> list[str]:
         ajuste = self.ajustes.get(tribunal.upper())
-        return (ajuste and ajuste.tipos_documento_aceitos) or self.tipos_documento_aceitos
+        return (
+            (ajuste and ajuste.tipos_documento_aceitos)
+            or TIPOS_DOCUMENTO_POR_TRIBUNAL.get(tribunal.upper())
+            or self.tipos_documento_aceitos
+        )
 
     def taxa(self, tribunal: str | None) -> float:
         ajuste = self.ajustes.get(tribunal.upper()) if tribunal else None

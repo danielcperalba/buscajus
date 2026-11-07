@@ -30,6 +30,8 @@
 >
 > **Revisão 16 (03/11/2026)**: ajustes depois do piloto: leitura das entradas do ZIP do caderno em streaming, uma comunicação por vez, com diagnóstico de entrada grande (seção 3.2); pesos do NER só de safetensors e download na imagem sem xet (seção 6.3); "anonimizou demais" na revisão por amostra e falha explícita da carga piloto interrompida, com os dias em andamento refeitos (seção 6.7).
 >
+> **Revisão 17 (07/11/2026)**: o TJRJ substitui o TJPR no DJEN do piloto; acórdãos do eproc com a ementa recortada do inteiro teor antes da anonimização (seção 3.2, F1-50).
+>
 > **Revisão 15 (30/10/2026)**: NER pré-treinado sem treino próprio, escolhido com dados sintéticos (`Luciano/bertimbau-base-lener_br`, MIT; seção 6.3 e [docs/avaliacao-ner.md](docs/avaliacao-ner.md)); mascaramento de documentos de identificação ancorado por palavra-chave (seção 6.3); validação por **revisão por amostra** das ementas já anonimizadas, com critério de aprovação, e **piloto local** pequeno e temporário (seção 6.7); disco criptografado passa a ser exigência só do servidor de produção (seção 12.2).
 >
 > **Revisão 5 (24/10/2026)**: fatos do caderno do DJEN já validados consolidados na seção 3.2 (status, 404, URL de 5 minutos, estrutura do ZIP, cabeçalho); a API do DJEN bloqueia IPs fora do Brasil; colunas novas nas tabelas de coleta (4.4) e regra de erros sem conteúdo.
@@ -230,6 +232,13 @@ O volume oscila muito depois do início (2 em 29/07/2025, 78 em 11/08, 22 em 01/
 **Carga inicial**: últimos 90 dias, do mais recente para o mais antigo, um caderno por vez. Com o volume medido no F1-01, isso dá ~90 consultas de metadados, **até ~14 GB transferidos** (o tmpfs nunca guarda mais de um ZIP) e **até ~200 mil ementas**.
 
 **Carga histórica**: em seguida, percorre **todos os dias úteis** desde o fim da carga inicial até 23/07/2025, sem pular dias de volume baixo nem tratar dia vazio como erro. Como o volume oscila, a estimativa de ~150–250 mil ementas a mais é grosseira e será medida. Em outros tribunais, a cobertura depende da adesão ao DJEN e da data em que cada um passou a publicar ementas de acórdão.
+
+**TJRJ no DJEN (F1-50)**: o TJRJ substituiu o TJPR no piloto (`BUSCAJUS_DJEN__TRIBUNAIS='["TJRJ"]'` no compose; o padrão do código segue TJPR, o tribunal das fixtures). Medição só com agregados (cadernos de 28/10 e 05/11/2026, ~60 mil comunicações por dia):
+
+- O TJRJ **não publica** "Ementa de Acórdão". Os acórdãos do **eproc de 2º grau** saem como `tipoDocumento` "Acórdão" (465 em 05/11/2026; todos com `link` em `eproc2g.tjrj.jus.br`), com o **inteiro teor** em HTML: partes e advogados, o título `EMENTA` num bloco próprio, a ementa, o título `ACÓRDÃO`, o dispositivo e a linha "Rio de Janeiro, 5 de novembro de 2026." (100% dos itens). Não há rótulo de relator: `relator` fica nulo.
+- Volume do eproc no DJEN: 0 em 05/03/2025, 2 em 02/06/2025, 22 em 01/09/2025, 58 em 01/12/2025, 18 em 02/03/2026, 189 em 01/07/2026, 465 em 05/11/2026. `djen.inicio_ementas.TJRJ = 2025-06-02`.
+- **Recorte antes da anonimização** (`ingest.djen.recorte`): do inteiro teor só seguem os blocos entre `EMENTA` e `ACÓRDÃO` e a data do julgamento; partes, advogados e o texto do acórdão são descartados em memória, antes do anonimizador e do bruto. O recorte vira uma tabela no formato do TJPR (`Data do Julgamento`, `Ementa`), lida pelo mesmo parser. Sem os dois títulos na ordem, o item conta como falha de parser. Validação sobre 1.098 acórdãos reais de 3 cadernos (só contagens): 100% recortados, 100% com data, nenhuma ementa com rótulo de parte ou com o texto do acórdão; ementa mediana de 2.665 caracteres.
+- **Fora por enquanto**: as "Conclusões de acórdão" do sistema antigo (tipos "Apelação", "AGRAVO DE INSTRUMENTO - CÍVEL" etc., ~540 por dia com ementa, formato irregular, sem `link` em parte deles).
 
 **TJDFT no DJEN**: **desativado** no MVP. A configuração rejeita `TJDFT` no conector DJEN enquanto o conector próprio do TJDFT estiver ativo (seção 3.5).
 

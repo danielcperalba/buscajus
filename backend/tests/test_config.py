@@ -23,6 +23,16 @@ def test_le_campos_aninhados_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> Non
     assert config.djen.inicio_ementas["TJSC"] == date(2024, 1, 2)
 
 
+def test_tjrj_como_no_compose(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1-50: só a sigla no ambiente basta; início e tipo de documento vêm do padrão."""
+    monkeypatch.setenv("BUSCAJUS_DJEN__TRIBUNAIS", '["TJRJ"]')
+    config = Config()
+    assert config.djen.tribunais == ["TJRJ"]
+    assert config.djen.inicio_ementas["TJRJ"] == date(2025, 6, 2)
+    assert config.djen.tipos_aceitos("TJRJ") == ["Acórdão"]
+    assert config.djen.tipos_aceitos("tjpr") == ["Ementa de Acórdão"]
+
+
 def test_rejeita_tjdft_no_djen_com_conector_proprio_ativo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BUSCAJUS_DJEN__TRIBUNAIS", '["TJPR", "TJDFT"]')
     monkeypatch.setenv(

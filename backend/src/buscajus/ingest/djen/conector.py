@@ -8,8 +8,9 @@ Fluxo de uma unidade (tribunal + dia):
 3. SHA-256 contra ``hash``; se divergir, apaga e repete com metadados novos (a URL vale
    5 minutos), até ``tentativas_hash``;
 4. leitura do ZIP: comunicações que não são ementa de acórdão são descartadas em memória,
-   sem log; as aceitas vão para o anonimizador ainda com os destinatários, que só existem
-   em memória; a quantidade lida é conferida com ``total_comunicacoes``;
+   sem log; nos tribunais que publicam o inteiro teor (TJRJ), a ementa é recortada antes
+   (``recorte``); as aceitas vão para o anonimizador ainda com os destinatários, que só
+   existem em memória; a quantidade lida é conferida com ``total_comunicacoes``;
 5. o ZIP é apagado antes de o lote seguir adiante, e de novo no ``finally``.
 
 O conector não funciona sem um anonimizador: não há caminho que grave o texto sem ele.
@@ -39,6 +40,7 @@ from buscajus.ingest.conector import (
 from buscajus.ingest.djen import caderno
 from buscajus.ingest.djen.campos import LISTA_BRANCA, tipo_aceito
 from buscajus.ingest.djen.normalizacao import normalizar
+from buscajus.ingest.djen.recorte import RECORTADORES
 from buscajus.ingest.http import ClienteHttp
 
 log = logging.getLogger(__name__)
@@ -151,6 +153,7 @@ class ConectorDjen:
         self, arquivo: Path, meta: caderno.MetadadosDjen, tribunal: str
     ) -> tuple[list[dict[str, object]], Contadores]:
         tipos = self._config.tipos_aceitos(tribunal)
+        recortar = RECORTADORES.get(tribunal)
         contadores = Contadores()
         itens: list[dict[str, object]] = []
         for comunicacao in caderno.ler_comunicacoes(arquivo):
@@ -159,6 +162,13 @@ class ConectorDjen:
                 # Descartada em memória: nada é gravado nem logado.
                 contadores.descartados += 1
                 continue
+            if recortar is not None:
+                # Inteiro teor (TJRJ): só a ementa segue para o anonimizador e o bruto.
+                recortada = recortar(comunicacao)
+                if recortada is None:
+                    contadores.falhas_parser += 1
+                    continue
+                comunicacao = recortada
             resultado = self._anonimizar(comunicacao)
             if isinstance(resultado, Rejeicao):
                 contadores.rejeitados_anonimizacao.append(resultado.id_comunicacao)

@@ -99,6 +99,28 @@ def test_sorteio_estratificado() -> None:
     }
 
 
+def test_sorteio_com_tjrj_no_lugar_do_tjpr() -> None:
+    """F1-50: o tribunal do DJEN é o que tem mais ementas; sobras de outro não entram."""
+    candidatos = [
+        revisao.Candidato(i, tribunal, estrato)
+        for i, (tribunal, estrato) in enumerate(
+            [("TJRJ", "criminal")] * 200
+            + [("TJRJ", "civel")] * 200
+            + [("TJPR", "civel")] * 3
+            + [("TJDFT", "criminal")] * 200
+            + [("TJDFT", "civel")] * 200
+        )
+    ]
+    amostra = revisao.sortear(candidatos, 100, 0.2, random.Random(1))  # noqa: S311
+    assert Counter((c.tribunal, c.estrato) for c in amostra) == {
+        ("TJRJ", "criminal"): 40,
+        ("TJRJ", "civel"): 40,
+        ("TJDFT", "criminal"): 10,
+        ("TJDFT", "civel"): 10,
+    }
+    assert revisao.estrato("TJRJ", "SECRETARIA DA 5ª CÂMARA CRIMINAL") == "criminal"
+
+
 def test_estrato_curto_cede_a_cota() -> None:
     candidatos = [revisao.Candidato(i, "TJPR", "criminal") for i in range(10)]
     candidatos += [revisao.Candidato(100 + i, "TJPR", "civel") for i in range(200)]
