@@ -5,7 +5,8 @@ vazamento ficam **só** na pasta privada (``ner-avaliacao-privado/``, fora do gi
 gravado em ``docs/`` tem apenas agregados.
 
 - :func:`amostrar`: sorteia ementas ativas do banco local, estratificadas por tribunal e área
-  (TJPR: ~50% câmaras criminais, ~25% família, ~25% cível; TJDFT: uma fração da amostra).
+  (TJPR: ~50% câmaras criminais, ~25% família, ~25% cível; TJRJ: ~50% criminal, ~50% cível;
+  TJDFT: uma fração da amostra).
 - :func:`revisar`: mostra uma ementa por vez e registra "ok", "anonimizou demais" ou "vazou"
   (com o trecho que escapou); salva a cada resposta, para parar e continuar depois. "Vazou"
   põe o acórdão em quarentena na hora.
@@ -47,9 +48,10 @@ HISTORICO = "historico.json"  # só agregados de cada rodada
 RODADAS = "rodadas"
 
 # Proporções dentro de cada tribunal. No TJPR, família e sucessões ficam na 11ª e na 12ª
-# Câmara Cível; no TJDFT não há turma própria, e família entra em cível.
+# Câmara Cível; no TJDFT e no TJRJ não há câmara/turma própria, e família entra em cível.
 PROPORCOES: dict[str, dict[str, float]] = {
     "TJPR": {"criminal": 0.50, "familia": 0.25, "civel": 0.25},
+    "TJRJ": {"criminal": 0.50, "civel": 0.50},
     "TJDFT": {"criminal": 0.50, "civel": 0.50},
 }
 ORGAOS_FAMILIA = {"TJPR": ("11ª Câmara Cível", "12ª Câmara Cível")}
@@ -145,11 +147,19 @@ class Candidato:
 
 
 def _cotas(n: int, fracao_tjdft: float, disponiveis: Counter[tuple[str, str]]) -> dict[str, int]:
-    """Quantidade por tribunal; a falta de um tribunal passa para o outro."""
-    tribunais = {t for t, _ in disponiveis}
-    tjdft = round(n * fracao_tjdft) if "TJDFT" in tribunais else 0
-    cotas = {"TJDFT": tjdft, "TJPR": n - tjdft}
-    for tribunal, outro in (("TJDFT", "TJPR"), ("TJPR", "TJDFT")):
+    """Quantidade por tribunal; a falta de um tribunal passa para o outro.
+
+    O tribunal do DJEN é o que tiver mais ementas disponíveis (TJRJ desde o F1-50; TJPR antes).
+    """
+    por_tribunal: Counter[str] = Counter()
+    for (t, _), v in disponiveis.items():
+        por_tribunal[t] += v
+    tjdft = round(n * fracao_tjdft) if "TJDFT" in por_tribunal else 0
+    djen = max(
+        (t for t in por_tribunal if t != "TJDFT"), key=por_tribunal.__getitem__, default="TJPR"
+    )
+    cotas = {"TJDFT": tjdft, djen: n - tjdft}
+    for tribunal, outro in (("TJDFT", djen), (djen, "TJDFT")):
         total = sum(v for (t, _), v in disponiveis.items() if t == tribunal)
         if cotas[tribunal] > total:
             cotas[outro] += cotas[tribunal] - total

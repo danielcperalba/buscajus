@@ -219,7 +219,7 @@ def trava_da_carga(engine: Engine) -> Iterator[None]:
             conexao.execute(text("SELECT pg_advisory_unlock(:chave)"), {"chave": CHAVE_TRAVA_CARGA})
 
 
-def unidades_interrompidas(engine: Engine) -> dict[str, list[date]]:
+def unidades_interrompidas(engine: Engine, tribunal_djen: str) -> dict[str, list[date]]:
     """Dias que ficaram ``em_andamento`` numa carga que morreu no meio (mais recente primeiro).
 
     Com a trava da carga, nenhuma outra carga está rodando: o que está em andamento foi
@@ -229,8 +229,9 @@ def unidades_interrompidas(engine: Engine) -> dict[str, list[date]]:
         djen = conexao.scalars(
             text("""
                 SELECT data FROM caderno_djen
-                WHERE tribunal = 'TJPR' AND status = 'em_andamento' ORDER BY data DESC
-            """)
+                WHERE tribunal = :tribunal AND status = 'em_andamento' ORDER BY data DESC
+            """),
+            {"tribunal": tribunal_djen},
         ).all()
         tjdft = conexao.scalars(
             text("""
@@ -251,7 +252,9 @@ def ordenar_candidatos(interrompidos: Sequence[date], janela: Sequence[date]) ->
 def executar_carga(
     config: Config, engine: Engine, *, hoje: date, dias_uteis: int = DIAS_UTEIS
 ) -> Volumes:
-    """Carga piloto: ``dias_uteis`` cadernos do TJPR (DJEN) e dias do TJDFT, no banco local.
+    """Carga piloto: ``dias_uteis`` cadernos do DJEN e dias do TJDFT, no banco local.
+
+    O tribunal do DJEN é o primeiro de ``djen.tribunais`` (TJRJ desde o F1-50).
 
     Dias que uma carga anterior deixou ``em_andamento`` são refeitos primeiro (``forcar``
     recomeça a unidade do zero) e contam entre os ``dias_uteis``.
@@ -264,15 +267,18 @@ def executar_carga(
     volumes = Volumes()
     janela = dias_uteis_anteriores(hoje)
 
+    tribunal = config.djen.tribunais[0]
     with trava_da_carga(engine):
-        interrompidas = unidades_interrompidas(engine)
+        interrompidas = unidades_interrompidas(engine, tribunal)
         volumes.retomados = {f: len(d) for f, d in interrompidas.items()}
 
         anon_djen = criar_anonimizador(detector)
-        coleta = fabrica_djen.criar_coleta(config, engine, anonimizador=anon_djen, tribunal="TJPR")
+        coleta = fabrica_djen.criar_coleta(
+            config, engine, anonimizador=anon_djen, tribunal=tribunal
+        )
         try:
             dias, resumos = carregar_dias(
-                lambda d: coleta.conector.planejar("TJPR", d, d)[0],
+                lambda d: coleta.conector.planejar(tribunal, d, d)[0],
                 lambda u: coleta.orquestrador.executar([u], forcar=True)[0],
                 ordenar_candidatos(interrompidas["djen"], janela),
                 dias_uteis,

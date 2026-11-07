@@ -106,7 +106,7 @@ docker compose up -d db
 docker compose run --rm worker buscajus modelos baixar-ner   # uma vez: pesos do NER no volume
 
 cd backend
-# 1. Carga: 5 dias úteis recentes do TJPR (DJEN) e 5 do TJDFT, sempre pelo worker do compose.
+# 1. Carga: 5 dias úteis recentes do tribunal do DJEN (TJRJ no compose) e 5 do TJDFT, sempre pelo worker.
 #    Recusa se o repositório ou a pasta da revisão estiverem no OneDrive, Dropbox, Google Drive…
 #    Se o worker morrer no meio (ex.: suspensão do Windows), o comando sai com erro; rode-o de
 #    novo: os dias que ficaram em andamento são refeitos primeiro.
